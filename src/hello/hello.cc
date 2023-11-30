@@ -45,5 +45,5 @@ TSPluginInit(int argc, const char *argv[])
     TSError("[%s] Plugin registration failed", PLUGIN_NAME);
   }
 
-  Dbg(dbg_ctl, "Hello World!!!");
+  Dbg(dbg_ctl, "Hello World!");
 }
