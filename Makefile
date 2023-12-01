@@ -1,5 +1,5 @@
 install: build
-	sudo cmake --build build --target install -v
+	sudo cmake --build build --config Release --target install -v
 
 build:
 	@rm -rf build

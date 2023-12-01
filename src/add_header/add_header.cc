@@ -155,7 +155,7 @@ TSPluginInit(int argc, const char *argv[])
 
     p = strchr(argv[i], ':');
     if (p) {
-      retval = TSMimeHdrFieldNameSet(hdr_bufp, hdr_loc, field_loc, argv[i], p - argv[i]);
+      retval = TSMimeHdrFieldNameSet(hdr_bufp, hdr_loc, field_loc, argv[i], static_cast<int>(p - argv[i]));
       if (retval == TS_ERROR) {
         TSError("[%s] Unable to name field", PLUGIN_NAME);
         goto error;
@@ -165,13 +165,13 @@ TSPluginInit(int argc, const char *argv[])
       while (isspace(*p)) {
         p += 1;
       }
-      retval = TSMimeHdrFieldValueStringInsert(hdr_bufp, hdr_loc, field_loc, -1, p, strlen(p));
+      retval = TSMimeHdrFieldValueStringInsert(hdr_bufp, hdr_loc, field_loc, -1, p, static_cast<int>(strlen(p)));
       if (retval == TS_ERROR) {
         TSError("[%s] Unable to insert field value", PLUGIN_NAME);
         goto error;
       }
     } else {
-      retval = TSMimeHdrFieldNameSet(hdr_bufp, hdr_loc, field_loc, argv[i], strlen(argv[i]));
+      retval = TSMimeHdrFieldNameSet(hdr_bufp, hdr_loc, field_loc, argv[i], static_cast<int>(strlen(argv[i])));
       if (retval == TS_ERROR) {
         TSError("[%s] Unable to set field name", PLUGIN_NAME);
         goto error;

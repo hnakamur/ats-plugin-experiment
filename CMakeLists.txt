@@ -20,8 +20,23 @@ endif()
 
 set(CMAKE_CXX_COMPILER clang++-16)
 set(CMAKE_C_COMPILER clang---16)
-set(CMAKE_CXX_FLAGS "-fstack-protector-strong -Wformat -Werror=format-security -g")
-set(CMAKE_C_FLAGS "-fstack-protector-strong -Wformat -Werror=format-security -g")
+
+# The compiler and linker options below are copied from
+# https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html
+# and -Wtrampolines is removed since it is unsupported to clang.
+set(CMAKE_CXX_FLAGS "-O2 -Wall -Wformat=2 -Wconversion -Wimplicit-fallthrough \
+-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 \
+-D_GLIBCXX_ASSERTIONS \
+-fstrict-flex-arrays=3 \
+-fstack-clash-protection -fstack-protector-strong")
+set(CMAKE_C_FLAGS "-O2 -Wall -Wformat=2 -Wconversion -Wimplicit-fallthrough \
+-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 \
+-D_GLIBCXX_ASSERTIONS \
+-fstrict-flex-arrays=3 \
+-fstack-clash-protection -fstack-protector-strong")
+set(CMAKE_MODULE_LINKER_FLAGS "-Wl,-z,nodlopen -Wl,-z,noexecstack \
+-Wl,-z,relro -Wl,-z,now")
+
 set(CMAKE_INSTALL_PREFIX /opt/trafficserver)
 set(CMAKE_INSTALL_LIBDIR lib)
 set(CMAKE_INSTALL_LIBEXECDIR lib/modules)
