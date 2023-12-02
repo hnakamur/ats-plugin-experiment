@@ -72,3 +72,20 @@ endfunction()
 
 add_atsplugin(hello src/hello/hello.cc)
 add_atsplugin(add_header src/add_header/add_header.cc)
+
+function(add_clang_format_target target)
+  add_custom_target(
+    clang-format-${target}
+    ${CMAKE_SOURCE_DIR}/tools/clang-format.sh ${CMAKE_SOURCE_DIR}/${target}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Checking clang-format for ${target}"
+    VERBATIM
+  )
+  list(APPEND CLANG_FORMAT_TARGETS clang-format-${target})
+  set(CLANG_FORMAT_TARGETS
+      ${CLANG_FORMAT_TARGETS}
+      PARENT_SCOPE
+  )
+endfunction(add_clang_format_target)
+
+add_clang_format_target(src)
