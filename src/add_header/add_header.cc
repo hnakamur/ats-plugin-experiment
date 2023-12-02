@@ -178,7 +178,8 @@ TSPluginInit(int argc, const char *argv[])
       }
     }
 
-    // TSMimeHdrFieldAppend is used only after successfully inserting field names and values
+    // TSMimeHdrFieldAppend is used only after successfully inserting field
+    // names and values
     retval = TSMimeHdrFieldAppend(hdr_bufp, hdr_loc, field_loc);
     if (retval != TS_SUCCESS) {
       TSError("[%s] Unable to add field", PLUGIN_NAME);
