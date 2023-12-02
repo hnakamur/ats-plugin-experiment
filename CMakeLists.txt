@@ -18,32 +18,48 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions(DEBUG _DEBUG)
 endif()
 
-set(CMAKE_CXX_COMPILER clang++-16)
-set(CMAKE_C_COMPILER clang---16)
-
-# The compiler and linker options below are copied from
-# https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html
-#
-# * -Wtrampolines is removed since it is unsupported to clang.
-# * -Wl,-z,nodlopen is removed to avoid "shared object cannot be dlopen()ed" error.
-#
-set(CMAKE_CXX_FLAGS "-O2 -Wall -Wformat=2 -Wconversion -Wimplicit-fallthrough \
--U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 \
--D_GLIBCXX_ASSERTIONS \
--fstrict-flex-arrays=3 \
--fstack-clash-protection -fstack-protector-strong")
-set(CMAKE_C_FLAGS "-O2 -Wall -Wformat=2 -Wconversion -Wimplicit-fallthrough \
--U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 \
--D_GLIBCXX_ASSERTIONS \
--fstrict-flex-arrays=3 \
--fstack-clash-protection -fstack-protector-strong")
-set(CMAKE_MODULE_LINKER_FLAGS "-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now")
-
 set(CMAKE_INSTALL_PREFIX /opt/trafficserver)
 set(CMAKE_INSTALL_LIBDIR lib)
 set(CMAKE_INSTALL_LIBEXECDIR lib/modules)
 
 find_library(TSAPI_LIBRARY tsapi PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Werror=unknown-warning-option)
+endif()
+
+# The compiler and linker options below are copied from Compiler Options
+# Hardening Guide for C and C++ by the Open Source Security Foundation (OpenSSF)
+# Best Practices Working Group, 2023-11-29
+# https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html
+# with changes: * change -O2 to -O3 * remove -Wl,-z,nodlopen since built plugins
+# cannot be loaded
+add_compile_options(
+  -O3
+  -Wall
+  -Wformat=2
+  -Wconversion
+  -Wimplicit-fallthrough
+  -U_FORTIFY_SOURCE
+  -D_FORTIFY_SOURCE=3
+  -D_GLIBCXX_ASSERTIONS
+  -fstack-clash-protection
+  -fstack-protector-strong
+)
+if((CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
+   OR (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13)
+)
+  add_compile_options(-fstrict-flex-arrays=3)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+  add_compile_options(-fstrict-flex-arrays=2)
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+  add_compile_options(-Wtrampolines)
+endif()
+add_link_options(-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now)
+
+# additional linker options
+add_link_options(-pthread -flto=auto -ffat-lto-objects)
 
 function(add_atsplugin name)
   add_library(${name} MODULE ${ARGN})
