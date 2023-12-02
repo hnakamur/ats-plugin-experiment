@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20..3.27)
-project(atshello VERSION 0.0.0)
+project(atsmyplugins VERSION 0.0.0)
 
 # We make this a cache entry so that it can be configured to different values
 # for testing purposes. For example, it can be used on CI to check compatibility
