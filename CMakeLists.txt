@@ -74,6 +74,7 @@ add_atsplugin(hello src/hello/hello.cc)
 add_atsplugin(add_header src/add_header/add_header.cc)
 add_atsplugin(remap src/remap/remap.cc)
 add_atsplugin(remap_header_add src/remap_header_add/remap_header_add.cc)
+add_atsplugin(passthrough src/passthrough/passthrough.cc)
 
 function(add_clang_format_target target)
   add_custom_target(
