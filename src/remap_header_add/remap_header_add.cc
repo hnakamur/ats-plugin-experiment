@@ -33,8 +33,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "ts/remap.h"
 #include "ts/ts.h"
+#include "ts/remap.h"
 
 struct remap_line {
   int argc;

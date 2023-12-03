@@ -42,8 +42,8 @@
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #endif
 
-#include "ts/remap.h"
 #include "ts/ts.h"
+#include "ts/remap.h"
 
 #define PLUGIN_NAME "remap"
 

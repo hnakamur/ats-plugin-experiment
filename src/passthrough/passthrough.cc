@@ -39,8 +39,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#include "ts/remap.h"
 #include "ts/ts.h"
+#include "ts/remap.h"
 
 constexpr char PLUGIN[] = "passthrough";
 
