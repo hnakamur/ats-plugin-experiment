@@ -66,7 +66,7 @@ TSRemapInit([[maybe_unused]] TSRemapInterface *api_info, [[maybe_unused]] char *
 }
 
 TSRemapStatus
-TSRemapDoRemap(void *ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
+TSRemapDoRemap([[maybe_unused]] void *ih, TSHttpTxn rh, [[maybe_unused]] TSRemapRequestInfo *rri)
 {
   const TSHttpStatus txnstat = TSHttpTxnStatusGet(rh);
   if (txnstat != TS_HTTP_STATUS_NONE && txnstat != TS_HTTP_STATUS_OK) {

@@ -30,7 +30,7 @@ endif()
 
 include(hardening)
 
-add_compile_options(-flto)
+add_compile_options(-flto -Wunused-parameter)
 add_link_options(-flto -pthread)
 
 function(add_atsplugin name)
