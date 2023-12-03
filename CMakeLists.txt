@@ -30,8 +30,8 @@ endif()
 
 include(hardening)
 
-# additional linker options
-add_link_options(-pthread -flto=auto -ffat-lto-objects)
+add_compile_options(-flto)
+add_link_options(-flto -pthread)
 
 function(add_atsplugin name)
   add_library(${name} MODULE ${ARGN})
