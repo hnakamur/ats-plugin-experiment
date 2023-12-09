@@ -1,0 +1,7 @@
+access_key=_YOUR_ACCESS_KEY_HERE_
+secret_key=_YOUR_SECRET_KEY_HERE_
+session_token=
+version=4
+v4-include-headers=
+v4-exclude-headers=
+v4-region-map=region_map.config
