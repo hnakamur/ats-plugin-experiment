@@ -67,9 +67,22 @@ static int RemapEchoInterceptHook(TSCont contp, TSEvent event, void *edata);
 static int RemapEchoTxnHook(TSCont contp, TSEvent event, void *edata);
 
 struct RemapEchoConfig {
-  explicit RemapEchoConfig(const std::string &content, const std::string &mimeType, int statusCode)
-    : content{content}, mimeType{mimeType}, statusCode{statusCode}
+  explicit RemapEchoConfig(const std::string &contentPathStr, const std::string &mimeType, int statusCode)
+    : mimeType{mimeType}, statusCode{statusCode}
   {
+    std::filesystem::path contentPath{contentPathStr};
+
+    if (!contentPath.is_absolute()) {
+      contentPath = std::filesystem::path(TSConfigDirGet()) / contentPath;
+    }
+    contentPath = std::filesystem::weakly_canonical(contentPath);
+
+    std::string cookedPathStr = contentPath;
+    std::ifstream ifstr;
+    ifstr.open(cookedPathStr.data());
+    std::stringstream sstr;
+    sstr << ifstr.rdbuf();
+    content = sstr.str();
   }
 
   ~RemapEchoConfig() { TSContDestroy(cont); }
@@ -543,13 +556,13 @@ TSReturnCode
 TSRemapNewInstance(int argc, char *argv[], void **ih, [[maybe_unused]] char *errbuf, [[maybe_unused]] int errbuf_size)
 {
   static const struct option longopt[] = {
-    {"content",     required_argument, nullptr, 'c' },
-    {"mime-type",   required_argument, nullptr, 'm' },
-    {"status-code", required_argument, nullptr, 's' },
-    {nullptr,       no_argument,       nullptr, '\0'}
+    {"content-path", required_argument, nullptr, 'c' },
+    {"mime-type",    required_argument, nullptr, 'm' },
+    {"status-code",  required_argument, nullptr, 's' },
+    {nullptr,        no_argument,       nullptr, '\0'}
   };
 
-  std::string content;
+  std::string contentPath;
   std::string mimeType = "text/plain";
   int statusCode       = 0;
 
@@ -564,7 +577,7 @@ TSRemapNewInstance(int argc, char *argv[], void **ih, [[maybe_unused]] char *err
 
     switch (opt) {
     case 'c': {
-      content = std::string(optarg);
+      contentPath = std::string(optarg);
     } break;
     case 'm': {
       mimeType = std::string(optarg);
@@ -579,12 +592,12 @@ TSRemapNewInstance(int argc, char *argv[], void **ih, [[maybe_unused]] char *err
     }
   }
 
-  if (content.size() == 0) {
-    VERROR("Need to specify --content\n");
+  if (contentPath.size() == 0) {
+    VERROR("Need to specify --content-path\n");
     return TS_ERROR;
   }
 
-  RemapEchoConfig *tc = new RemapEchoConfig(content, mimeType, statusCode);
+  RemapEchoConfig *tc = new RemapEchoConfig(contentPath, mimeType, statusCode);
 
   // Finally, create the continuation to use for this remap rule, tracking the config as cont data.
   tc->cont = TSContCreate(RemapEchoTxnHook, nullptr);
