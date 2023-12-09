@@ -38,7 +38,7 @@ ts:
   diags:
     debug:
       enabled: 1
-      tags: http|dns|hello|headeradd_remap|plugin|statichit
+      tags: http|dns|hello|headeradd_remap|plugin|statichit|ts_lua
 
 #    https://docs.trafficserver.apache.org/records.yaml#proxy-config-dump-mem-info-frequency
   dump_mem_info_frequency: 0
@@ -121,7 +121,7 @@ ts:
 ##############################################################################
     negative_caching_enabled: 0
     negative_caching_lifetime: 1800
-    normalize_ae: 1
+    normalize_ae: 0
 
 ##############################################################################
 # Parent proxy configuration, in addition to these settings also see parent.config. Docs:

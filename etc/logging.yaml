@@ -44,7 +44,7 @@ logging:
 
     - name: "ltsv"
       escape: ltsv
-      format: 'time:%<cqtd>T%<cqtt>	ts:%<cqtq>	chi:%<chi>	chp:%<chp>	cqpv:%<cqpv>	cqhm:%<cqhm>	cquuh:%<cquuh>	cqu:%<cqu>	status:%<pssc>	os_st:%<sssc>	ttmsf:%<ttmsf>	stmsf:%<stmsf>	cqtr:%<cqtr>	inm:%<{If-None-Match}cqh>	ims:%<{If-Modified-Since}cqh>	hhi:%<nhi>	nhp:%<nhp>	cqhl:%<cqhl>	cqcl:%<cqcl>	pshl:%<pshl>	pscl:%<pscl>	sshv:%<sshv>	crc:%<crc>	crsc:%<crsc>	sca:%<sca>	sstc:%<sstc>	age:%<{Age}ssh>	via:%<{Via}psh>	ua:%<{User-agent}cqh>	@test:%<{@test}cqh>'
+      format: 'time:%<cqtd>T%<cqtt>	ts:%<cqtq>	chi:%<chi>	chp:%<chp>	cqpv:%<cqpv>	cqhm:%<cqhm>	cquuh:%<cquuh>	cqu:%<cqu>	status:%<pssc>	os_st:%<sssc>	ttmsf:%<ttmsf>	stmsf:%<stmsf>	cqtr:%<cqtr>	inm:%<{If-None-Match}cqh>	ims:%<{If-Modified-Since}cqh>	hhi:%<nhi>	nhp:%<nhp>	cqhl:%<cqhl>	cqcl:%<cqcl>	pshl:%<pshl>	pscl:%<pscl>	sshv:%<sshv>	crc:%<crc>	crsc:%<crsc>	sca:%<sca>	sstc:%<sstc>	age:%<{Age}ssh>	via:%<{Via}psh>	ua:%<{User-agent}cqh>	ae:%<{Accept-Encoding}cqh>	@test:%<{@test}cqh>'
 
   logs:
     - filename: proxy.ltsv.log
