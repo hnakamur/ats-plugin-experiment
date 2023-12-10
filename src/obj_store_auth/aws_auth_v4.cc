@@ -22,13 +22,13 @@
  * @see aws_auth_v4.h
  */
 
-#include <cstring>        /* strlen() */
-#include <string>         /* stoi() */
-#include <ctime>          /* strftime(), time(), gmtime_r() */
-#include <iomanip>        /* std::setw */
-#include <sstream>        /* std::stringstream */
-#include <openssl/sha.h>  /* SHA(), sha256_Update(), SHA256_Final, etc. */
-#include <openssl/hmac.h> /* HMAC() */
+#include <cstring> /* strlen() */
+#include <string>  /* stoi() */
+#include <ctime>   /* strftime(), time(), gmtime_r() */
+#include <iomanip> /* std::setw */
+#include <sstream> /* std::stringstream */
+#include <sodium/crypto_auth_hmacsha256.h>
+#include <sodium/crypto_hash_sha256.h>
 
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
 #include <iostream>
@@ -229,30 +229,30 @@ trimWhiteSpaces(const String &s)
  * Group of static inline helper function for less error prone parameter handling and unit test logging.
  */
 inline static void
-sha256Update(SHA256_CTX *ctx, const char *in, size_t inLen)
+sha256Update(crypto_hash_sha256_state *state, const char *in, size_t inLen)
 {
-  SHA256_Update(ctx, in, inLen);
+  crypto_hash_sha256_update(state, reinterpret_cast<const unsigned char *>(in), inLen);
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
   std::cout << String(in, inLen);
 #endif
 }
 
 inline static void
-sha256Update(SHA256_CTX *ctx, const char *in)
+sha256Update(crypto_hash_sha256_state *state, const char *in)
 {
-  sha256Update(ctx, in, strlen(in));
+  sha256Update(state, in, strlen(in));
 }
 
 inline static void
-sha256Update(SHA256_CTX *ctx, const String &in)
+sha256Update(crypto_hash_sha256_state *state, const String &in)
 {
-  sha256Update(ctx, in.c_str(), in.length());
+  sha256Update(state, in.c_str(), in.length());
 }
 
 inline static void
-sha256Final(unsigned char hex[SHA256_DIGEST_LENGTH], SHA256_CTX *ctx)
+sha256Final(unsigned char hex[crypto_hash_sha256_BYTES], crypto_hash_sha256_state *state)
 {
-  SHA256_Final(hex, ctx);
+  crypto_hash_sha256_final(state, hex);
 }
 
 /**
@@ -271,10 +271,10 @@ getPayloadSha256(bool signPayload)
     return UNSIGNED_PAYLOAD;
   }
 
-  unsigned char payloadHash[SHA256_DIGEST_LENGTH];
-  SHA256(reinterpret_cast<const unsigned char *>(""), 0, payloadHash); /* empty content */
+  unsigned char payloadHash[crypto_hash_sha256_BYTES];
+  crypto_hash_sha256(payloadHash, reinterpret_cast<const unsigned char *>(""), 0); /* empty content */
 
-  return base16Encode(reinterpret_cast<char *>(payloadHash), SHA256_DIGEST_LENGTH);
+  return base16Encode(reinterpret_cast<char *>(payloadHash), crypto_hash_sha256_BYTES);
 }
 
 /**
@@ -296,10 +296,10 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
 {
   int length;
   const char *str = nullptr;
-  unsigned char canonicalRequestSha256Hash[SHA256_DIGEST_LENGTH];
-  SHA256_CTX canonicalRequestSha256Ctx;
+  unsigned char canonicalRequestSha256Hash[crypto_hash_sha256_BYTES];
+  crypto_hash_sha256_state canonicalRequestSha256State;
 
-  SHA256_Init(&canonicalRequestSha256Ctx);
+  crypto_hash_sha256_init(&canonicalRequestSha256State);
 
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
   std::cout << "<CanonicalRequest>";
@@ -307,8 +307,8 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
 
   /* <HTTPMethod>\n */
   str = api.getMethod(&length);
-  sha256Update(&canonicalRequestSha256Ctx, str, length);
-  sha256Update(&canonicalRequestSha256Ctx, "\n");
+  sha256Update(&canonicalRequestSha256State, str, length);
+  sha256Update(&canonicalRequestSha256State, "\n");
 
   /* URI Encoded Canonical URI
    * <CanonicalURI>\n */
@@ -321,8 +321,8 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
     path.append(str, length);
   }
   String canonicalUri = canonicalEncode(path, /* isObjectName */ true);
-  sha256Update(&canonicalRequestSha256Ctx, canonicalUri);
-  sha256Update(&canonicalRequestSha256Ctx, "\n");
+  sha256Update(&canonicalRequestSha256State, canonicalUri);
+  sha256Update(&canonicalRequestSha256State, "\n");
 
   /* Sorted Canonical Query String
    * <CanonicalQueryString>\n */
@@ -352,8 +352,8 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
     queryStr.append(paramName);
     queryStr.append("=").append(paramsMap[paramName]);
   }
-  sha256Update(&canonicalRequestSha256Ctx, queryStr);
-  sha256Update(&canonicalRequestSha256Ctx, "\n");
+  sha256Update(&canonicalRequestSha256State, queryStr);
+  sha256Update(&canonicalRequestSha256State, "\n");
 
   /* Sorted Canonical Headers
    *  <CanonicalHeaders>\n */
@@ -409,12 +409,12 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
   }
 
   for (const auto &it : signedHeadersSet) {
-    sha256Update(&canonicalRequestSha256Ctx, it);
-    sha256Update(&canonicalRequestSha256Ctx, ":");
-    sha256Update(&canonicalRequestSha256Ctx, headersMap[it]);
-    sha256Update(&canonicalRequestSha256Ctx, "\n");
+    sha256Update(&canonicalRequestSha256State, it);
+    sha256Update(&canonicalRequestSha256State, ":");
+    sha256Update(&canonicalRequestSha256State, headersMap[it]);
+    sha256Update(&canonicalRequestSha256State, "\n");
   }
-  sha256Update(&canonicalRequestSha256Ctx, "\n");
+  sha256Update(&canonicalRequestSha256State, "\n");
 
   for (const auto &it : signedHeadersSet) {
     if (!signedHeaders.empty()) {
@@ -423,20 +423,20 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
     signedHeaders.append(it);
   }
 
-  sha256Update(&canonicalRequestSha256Ctx, signedHeaders);
-  sha256Update(&canonicalRequestSha256Ctx, "\n");
+  sha256Update(&canonicalRequestSha256State, signedHeaders);
+  sha256Update(&canonicalRequestSha256State, "\n");
 
   /* Hex(SHA256Hash(<payload>) (no new-line char at end)
    * @TODO support non-empty content, i.e. POST */
   String payloadSha256Hash = getPayloadSha256(signPayload);
-  sha256Update(&canonicalRequestSha256Ctx, payloadSha256Hash);
+  sha256Update(&canonicalRequestSha256State, payloadSha256Hash);
 
   /* Hex(SHA256Hash(<CanonicalRequest>)) */
-  sha256Final(canonicalRequestSha256Hash, &canonicalRequestSha256Ctx);
+  sha256Final(canonicalRequestSha256Hash, &canonicalRequestSha256State);
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
   std::cout << "</CanonicalRequest>" << std::endl;
 #endif
-  return base16Encode(reinterpret_cast<char *>(canonicalRequestSha256Hash), SHA256_DIGEST_LENGTH);
+  return base16Encode(reinterpret_cast<char *>(canonicalRequestSha256Hash), crypto_hash_sha256_BYTES);
 }
 
 /**
@@ -636,6 +636,17 @@ getStringToSign(const char *entryPoint, size_t EntryPointLen, const char *dateTi
   return stringToSign;
 }
 
+static unsigned char *
+hmacsha256(const unsigned char *key, size_t keylen, const unsigned char *in, unsigned long long inlen, unsigned char *out)
+{
+  crypto_auth_hmacsha256_state state;
+
+  crypto_auth_hmacsha256_init(&state, key, keylen);
+  crypto_auth_hmacsha256_update(&state, in, inlen);
+  crypto_auth_hmacsha256_final(&state, out);
+  return out;
+}
+
 /**
  * @brief Calculates the final signature based on the following parameters and base16 encodes it.
  *
@@ -655,7 +666,7 @@ getStringToSign(const char *entryPoint, size_t EntryPointLen, const char *dateTi
  * @param stringToSign string to sign
  * @param stringToSignLen length of the string to sign
  * @param base16Signature output buffer where the base16 signature will be stored
- * @param base16SignatureLen size of the signature buffer = EVP_MAX_MD_SIZE (at least)
+ * @param base16SignatureLen size of the signature buffer = crypto_auth_hmacsha256_BYTES (at least)
  *
  * @return number of characters written to the output buffer
  */
@@ -664,29 +675,28 @@ getSignature(const char *awsSecret, size_t awsSecretLen, const char *awsRegion, 
              size_t awsServiceLen, const char *dateTime, size_t dateTimeLen, const char *stringToSign, size_t stringToSignLen,
              char *signature, size_t signatureLen)
 {
-  unsigned int dateKeyLen = EVP_MAX_MD_SIZE;
-  unsigned char dateKey[EVP_MAX_MD_SIZE];
-  unsigned int dateRegionKeyLen = EVP_MAX_MD_SIZE;
-  unsigned char dateRegionKey[EVP_MAX_MD_SIZE];
-  unsigned int dateRegionServiceKeyLen = EVP_MAX_MD_SIZE;
-  unsigned char dateRegionServiceKey[EVP_MAX_MD_SIZE];
-  unsigned int signingKeyLen = EVP_MAX_MD_SIZE;
-  unsigned char signingKey[EVP_MAX_MD_SIZE];
+  unsigned int dateKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  unsigned char dateKey[crypto_auth_hmacsha256_KEYBYTES];
+  unsigned int dateRegionKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  unsigned char dateRegionKey[crypto_auth_hmacsha256_KEYBYTES];
+  unsigned int dateRegionServiceKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  unsigned char dateRegionServiceKey[crypto_auth_hmacsha256_KEYBYTES];
+  unsigned int signingKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  unsigned char signingKey[crypto_auth_hmacsha256_KEYBYTES];
 
   size_t keyLen = 4 + awsSecretLen;
-  char key[keyLen];
+  unsigned char key[keyLen];
   memcpy(key, "AWS4", 4);
   memcpy(key + 4, awsSecret, awsSecretLen);
 
   unsigned int len = signatureLen;
-  if (HMAC(EVP_sha256(), key, keyLen, (unsigned char *)dateTime, dateTimeLen, dateKey, &dateKeyLen) &&
-      HMAC(EVP_sha256(), dateKey, dateKeyLen, (unsigned char *)awsRegion, awsRegionLen, dateRegionKey, &dateRegionKeyLen) &&
-      HMAC(EVP_sha256(), dateRegionKey, dateRegionKeyLen, (unsigned char *)awsService, awsServiceLen, dateRegionServiceKey,
-           &dateRegionServiceKeyLen) &&
-      HMAC(EVP_sha256(), dateRegionServiceKey, dateRegionServiceKeyLen, reinterpret_cast<const unsigned char *>("aws4_request"), 12,
-           signingKey, &signingKeyLen) &&
-      HMAC(EVP_sha256(), signingKey, signingKeyLen, (unsigned char *)stringToSign, stringToSignLen,
-           reinterpret_cast<unsigned char *>(signature), &len)) {
+  if (hmacsha256(key, keyLen, (const unsigned char *)dateTime, dateTimeLen, dateKey) &&
+      hmacsha256(dateKey, dateKeyLen, (const unsigned char *)awsRegion, awsRegionLen, dateRegionKey) &&
+      hmacsha256(dateRegionKey, dateRegionKeyLen, (const unsigned char *)awsService, awsServiceLen, dateRegionServiceKey) &&
+      hmacsha256(dateRegionServiceKey, dateRegionServiceKeyLen, reinterpret_cast<const unsigned char *>("aws4_request"), 12,
+                 signingKey) &&
+      hmacsha256(signingKey, signingKeyLen, (const unsigned char *)stringToSign, stringToSignLen,
+                 reinterpret_cast<unsigned char *>(signature))) {
     return len;
   }
 
@@ -744,10 +754,10 @@ AwsAuthV4::getAuthorizationHeader()
   std::cout << "<StringToSign>" << stringToSign << "</StringToSign>" << std::endl;
 #endif
 
-  char signature[EVP_MAX_MD_SIZE] = "";
+  char signature[crypto_auth_hmacsha256_BYTES] = "";
   size_t signatureLen =
     getSignature(_awsSecretAccessKey, _awsSecretAccessKeyLen, awsRegion.c_str(), awsRegion.length(), _awsService, _awsServiceLen,
-                 _dateTime, 8, stringToSign.c_str(), stringToSign.length(), signature, EVP_MAX_MD_SIZE);
+                 _dateTime, 8, stringToSign.c_str(), stringToSign.length(), signature, crypto_auth_hmacsha256_BYTES);
 
   String base16Signature = base16Encode(signature, signatureLen);
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
