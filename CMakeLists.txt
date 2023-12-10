@@ -33,6 +33,8 @@ include(hardening)
 add_compile_options(-flto -Wunused-parameter)
 add_link_options(-flto -pthread)
 
+find_library(OpenSSLCrypto crypto)
+
 function(add_atsplugin name)
   add_library(${name} MODULE ${ARGN})
   target_include_directories(${name} PRIVATE ${CMAKE_INSTALL_PREFIX}/include)
@@ -48,6 +50,9 @@ add_atsplugin(remap src/remap/remap.cc)
 add_atsplugin(remap_header_add src/remap_header_add/remap_header_add.cc)
 add_atsplugin(remap_passthru src/remap_passthru/remap_passthru.cc)
 add_atsplugin(remap_echo src/remap_echo/remap_echo.cc)
+add_atsplugin(obj_store_auth src/obj_store_auth/obj_store_auth.cc src/obj_store_auth/aws_auth_v4.cc)
+target_compile_definitions(obj_store_auth PRIVATE OPENSSL_API_COMPAT=10002 HAVE_HMAC_CTX_NEW=1)
+target_link_libraries(obj_store_auth PRIVATE ${OpenSSLCrypto})
 
 function(add_clang_format_target target)
   add_custom_target(

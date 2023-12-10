@@ -46,9 +46,7 @@
 
 #include <ts/ts.h>
 #include <ts/remap.h>
-#include <ts/remap_version.h>
 #include <tscpp/util/TsSharedMutex.h>
-#include "tscore/ink_config.h"
 #include "swoc/TextView.h"
 
 #include "aws_auth_v4.h"
@@ -1097,7 +1095,6 @@ config_reloader(TSCont cont, TSEvent event, void *edata)
 TSReturnCode
 TSRemapInit(TSRemapInterface *api_info, char *errbuf, int errbuf_size)
 {
-  CHECK_REMAP_API_COMPATIBILITY(api_info, errbuf, errbuf_size);
   Dbg(dbg_ctl, "plugin is successfully initialized");
   return TS_SUCCESS;
 }
