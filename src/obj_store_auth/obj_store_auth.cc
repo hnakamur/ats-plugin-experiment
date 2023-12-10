@@ -35,9 +35,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <openssl/sha.h>
-#include <openssl/hmac.h>
-
 #include <chrono>
 #include <atomic>
 #include <thread>
@@ -688,7 +685,6 @@ public:
     return true;
   }
 
-  TSHttpStatus authorizeV2(S3Config *s3);
   TSHttpStatus authorizeV4(S3Config *s3);
   TSHttpStatus authorize(S3Config *s3);
   bool set_header(const char *header, int header_len, const char *val, int val_len);
@@ -767,9 +763,6 @@ S3Request::authorize(S3Config *s3)
 {
   TSHttpStatus status = TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
   switch (s3->version()) {
-  case 2:
-    status = authorizeV2(s3);
-    break;
   case 4:
     status = authorizeV4(s3);
     break;
@@ -815,180 +808,6 @@ S3Request::authorizeV4(S3Config *s3)
   }
 
   return TS_HTTP_STATUS_OK;
-}
-
-// Method to authorize the S3 request:
-//
-// StringToSign = HTTP-VERB + "\n" +
-//    Content-MD5 + "\n" +
-//    Content-Type + "\n" +
-//    Date + "\n" +
-//    CanonicalizedAmzHeaders +
-//    CanonicalizedResource;
-//
-// ToDo:
-// -----
-//     1) UTF8
-//     2) Support POST type requests
-//     3) Canonicalize the Amz headers
-//
-//  Note: This assumes that the URI path has been appropriately canonicalized by remapping
-//
-TSHttpStatus
-S3Request::authorizeV2(S3Config *s3)
-{
-  TSHttpStatus status = TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  TSMLoc host_loc = TS_NULL_MLOC, md5_loc = TS_NULL_MLOC, contype_loc = TS_NULL_MLOC;
-  int method_len = 0, path_len = 0, param_len = 0, host_len = 0, con_md5_len = 0, con_type_len = 0, date_len = 0;
-  const char *method = nullptr, *path = nullptr, *param = nullptr, *host = nullptr, *con_md5 = nullptr, *con_type = nullptr,
-             *host_endp = nullptr;
-  char date[128]; // Plenty of space for a Date value
-  time_t now = time(nullptr);
-  struct tm now_tm;
-
-  // Start with some request resources we need
-  if (nullptr == (method = TSHttpHdrMethodGet(_bufp, _hdr_loc, &method_len))) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
-  if (nullptr == (path = TSUrlPathGet(_bufp, _url_loc, &path_len))) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
-
-  // get matrix parameters
-  param = TSUrlHttpParamsGet(_bufp, _url_loc, &param_len);
-
-  // Next, setup the Date: header, it's required.
-  if (nullptr == gmtime_r(&now, &now_tm)) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
-  if ((date_len = strftime(date, sizeof(date) - 1, DATE_FMT, &now_tm)) <= 0) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
-
-  // Add the Date: header to the request (this overwrites any existing Date header)
-  set_header(TS_MIME_FIELD_DATE, TS_MIME_LEN_DATE, date, date_len);
-
-  // If the configuration is a "virtual host" (foo.s3.aws ...), extract the
-  // first portion into the Host: header.
-  if (s3->virt_host()) {
-    host_loc = TSMimeHdrFieldFind(_bufp, _hdr_loc, TS_MIME_FIELD_HOST, TS_MIME_LEN_HOST);
-    if (host_loc) {
-      host      = TSMimeHdrFieldValueStringGet(_bufp, _hdr_loc, host_loc, -1, &host_len);
-      host_endp = static_cast<const char *>(memchr(host, '.', host_len));
-    } else {
-      return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-    }
-  }
-
-  // Just in case we add Content-MD5 if present
-  md5_loc = TSMimeHdrFieldFind(_bufp, _hdr_loc, TS_MIME_FIELD_CONTENT_MD5, TS_MIME_LEN_CONTENT_MD5);
-  if (md5_loc) {
-    con_md5 = TSMimeHdrFieldValueStringGet(_bufp, _hdr_loc, md5_loc, -1, &con_md5_len);
-  }
-
-  // get the Content-Type if available - (buggy) clients may send it
-  // for GET requests too
-  contype_loc = TSMimeHdrFieldFind(_bufp, _hdr_loc, TS_MIME_FIELD_CONTENT_TYPE, TS_MIME_LEN_CONTENT_TYPE);
-  if (contype_loc) {
-    con_type = TSMimeHdrFieldValueStringGet(_bufp, _hdr_loc, contype_loc, -1, &con_type_len);
-  }
-
-  // For debugging, lets produce some nice output
-  if (dbg_ctl.on()) {
-    Dbg(dbg_ctl, "Signature string is:");
-    // ToDo: This should include the Content-MD5 and Content-Type (for POST)
-    Dbg(dbg_ctl, "%.*s", method_len, method);
-    if (con_md5) {
-      Dbg(dbg_ctl, "%.*s", con_md5_len, con_md5);
-    }
-
-    if (con_type) {
-      Dbg(dbg_ctl, "%.*s", con_type_len, con_type);
-    }
-
-    Dbg(dbg_ctl, "%.*s", date_len, date);
-
-    const size_t left_size   = 1024;
-    char left[left_size + 1] = "/";
-    size_t loff              = 1;
-
-    // ToDo: What to do with the CanonicalizedAmzHeaders ...
-    if (host && host_endp) {
-      loff += str_concat(&left[loff], (left_size - loff), host, static_cast<int>(host_endp - host));
-      loff += str_concat(&left[loff], (left_size - loff), "/", 1);
-    }
-
-    loff += str_concat(&left[loff], (left_size - loff), path, path_len);
-
-    if (param) {
-      loff += str_concat(&left[loff], (left_size - loff), ";", 1);
-      str_concat(&left[loff], (left_size - loff), param, param_len);
-    }
-
-    Dbg(dbg_ctl, "%s", left);
-  }
-
-// Produce the SHA1 MAC digest
-#ifndef HAVE_HMAC_CTX_NEW
-  HMAC_CTX ctx[1];
-#else
-  HMAC_CTX *ctx;
-#endif
-  unsigned int hmac_len;
-  size_t hmac_b64_len;
-  unsigned char hmac[SHA_DIGEST_LENGTH];
-  char hmac_b64[SHA_DIGEST_LENGTH * 2];
-
-#ifndef HAVE_HMAC_CTX_NEW
-  HMAC_CTX_init(ctx);
-#else
-  ctx = HMAC_CTX_new();
-#endif
-  HMAC_Init_ex(ctx, s3->secret(), s3->secret_len(), EVP_sha1(), nullptr);
-  HMAC_Update(ctx, (unsigned char *)method, method_len);
-  HMAC_Update(ctx, reinterpret_cast<const unsigned char *>("\n"), 1);
-  HMAC_Update(ctx, (unsigned char *)con_md5, con_md5_len);
-  HMAC_Update(ctx, reinterpret_cast<const unsigned char *>("\n"), 1);
-  HMAC_Update(ctx, (unsigned char *)con_type, con_type_len);
-  HMAC_Update(ctx, reinterpret_cast<const unsigned char *>("\n"), 1);
-  HMAC_Update(ctx, reinterpret_cast<unsigned char *>(date), date_len);
-  HMAC_Update(ctx, reinterpret_cast<const unsigned char *>("\n/"), 2);
-
-  if (host && host_endp) {
-    HMAC_Update(ctx, (unsigned char *)host, host_endp - host);
-    HMAC_Update(ctx, reinterpret_cast<const unsigned char *>("/"), 1);
-  }
-
-  HMAC_Update(ctx, (unsigned char *)path, path_len);
-  if (param) {
-    HMAC_Update(ctx, reinterpret_cast<const unsigned char *>(";"), 1); // TSUrlHttpParamsGet() does not include ';'
-    HMAC_Update(ctx, (unsigned char *)param, param_len);
-  }
-
-  HMAC_Final(ctx, hmac, &hmac_len);
-#ifndef HAVE_HMAC_CTX_NEW
-  HMAC_CTX_cleanup(ctx);
-#else
-  HMAC_CTX_free(ctx);
-#endif
-
-  // Do the Base64 encoding and set the Authorization header.
-  if (TS_SUCCESS == TSBase64Encode(reinterpret_cast<const char *>(hmac), hmac_len, hmac_b64, sizeof(hmac_b64) - 1, &hmac_b64_len)) {
-    char auth[256]; // This is way bigger than any string we can think of.
-    int auth_len = snprintf(auth, sizeof(auth), "AWS %s:%.*s", s3->keyid(), static_cast<int>(hmac_b64_len), hmac_b64);
-
-    if ((auth_len > 0) && (auth_len < static_cast<int>(sizeof(auth)))) {
-      set_header(TS_MIME_FIELD_AUTHORIZATION, TS_MIME_LEN_AUTHORIZATION, auth, auth_len);
-      status = TS_HTTP_STATUS_OK;
-    }
-  }
-
-  // Cleanup
-  TSHandleMLocRelease(_bufp, _hdr_loc, contype_loc);
-  TSHandleMLocRelease(_bufp, _hdr_loc, md5_loc);
-  TSHandleMLocRelease(_bufp, _hdr_loc, host_loc);
-
-  return status;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
