@@ -24,6 +24,8 @@ set(CMAKE_INSTALL_LIBEXECDIR lib/modules)
 
 find_library(TSAPI_LIBRARY tsapi PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
 
+find_library(YAMLCPP_LIBRARY yaml-cpp PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=unknown-warning-option)
 endif()
@@ -34,6 +36,8 @@ add_compile_options(-flto -Wunused-parameter)
 add_link_options(-flto -pthread)
 
 find_library(libsodium sodium)
+
+find_library(liblmdb lmdb)
 
 function(add_atsplugin name)
   add_library(${name} MODULE ${ARGN})
@@ -52,6 +56,12 @@ add_atsplugin(remap_passthru src/remap_passthru/remap_passthru.cc)
 add_atsplugin(remap_echo src/remap_echo/remap_echo.cc)
 add_atsplugin(obj_store_auth src/obj_store_auth/obj_store_auth.cc src/obj_store_auth/aws_auth_v4.cc)
 target_link_libraries(obj_store_auth PRIVATE ${libsodium})
+
+add_executable(lmdb_setup src/lmdb_setup/lmdb_setup.cc)
+target_include_directories(lmdb_setup PRIVATE ${CMAKE_INSTALL_PREFIX}/include)
+target_link_libraries(lmdb_setup PRIVATE ${YAMLCPP_LIBRARY})
+target_link_libraries(lmdb_setup PRIVATE ${liblmdb})
+install(TARGETS lmdb_setup ${CMAKE_INSTALL_BINDIR})
 
 function(add_clang_format_target target)
   add_custom_target(

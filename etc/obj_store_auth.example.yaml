@@ -1,0 +1,12 @@
+---
+lmdb_path: /tmp/obj_store_auth
+map_size: 1073741824 # 1GiB
+max_readers: 200
+max_dbs: 20
+credentials:
+- key: user1
+  access_key: _YOUR_ACCESS_KEY_HERE_
+  secret_key: _YOUR_SECRET_KEY_HERE_
+  bucket: _YOUR_BUCKET_NAME_HERE_
+  endpoint: _YOUR_ENDPOINT_HERE_
+  region: _YOUR_REGION_HERE_
