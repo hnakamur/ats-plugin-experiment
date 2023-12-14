@@ -43,7 +43,7 @@
 
 #include <ts/ts.h>
 #include <ts/remap.h>
-#include <tscpp/util/TsSharedMutex.h>
+#include <tsutil/TsSharedMutex.h>
 #include "swoc/TextView.h"
 
 #include "aws_auth_v4.h"
