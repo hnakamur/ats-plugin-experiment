@@ -58,7 +58,7 @@ add_atsplugin(obj_store_auth src/obj_store_auth/obj_store_auth.cc src/obj_store_
 target_link_libraries(obj_store_auth PRIVATE ${libsodium})
 
 add_executable(lmdb_setup src/lmdb_setup/lmdb_setup.cc)
-target_include_directories(lmdb_setup PRIVATE ${CMAKE_INSTALL_PREFIX}/include)
+target_include_directories(lmdb_setup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_INSTALL_PREFIX}/include)
 target_link_libraries(lmdb_setup PRIVATE ${YAMLCPP_LIBRARY})
 target_link_libraries(lmdb_setup PRIVATE ${liblmdb})
 install(TARGETS lmdb_setup ${CMAKE_INSTALL_BINDIR})
