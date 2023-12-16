@@ -60,4 +60,6 @@ target_link_libraries(lmdb_setup PRIVATE ${YAMLCPP_LIBRARY} ${LMDB_LIBRARY} ${SW
 install(TARGETS lmdb_setup ${CMAKE_INSTALL_BINDIR})
 
 include(clang_format)
-add_clang_format_target(src)
+set(CLANG_FORMART_TARGET_DIRECTORIES src)
+set(CLANG_FORMART_TARGET_PATTERNS *.h;*.cpp)
+add_clang_format_target()
