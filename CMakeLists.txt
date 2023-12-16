@@ -39,8 +39,9 @@ add_link_options(-flto -pthread)
 add_subdirectory(src)
 
 include(clang_format)
+add_clang_format_target(clang_format_include include)
 add_clang_format_target(clang_format_src src)
-add_custom_target(clang_format DEPENDS clang_format_src)
+add_custom_target(clang_format DEPENDS clang_format_include clang_format_src)
 
 include(cmake_format)
 add_cmake_format_target_toplevel(cmake_format_toplevel)
