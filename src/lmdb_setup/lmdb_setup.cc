@@ -54,8 +54,9 @@ main(int argc, char **argv)
           std::cerr << "buffer too small\n";
           return 1;
         }
-        txn.put(dbi, key, value);
-        std::cout << "done put value, key=" << key << ", value=" << txn.get(dbi, key) << '\n';
+        txn.put(dbi, LMDB::ByteSpan(key), LMDB::ByteSpan(value));
+        std::cout << "done put value, key=" << key << ", value=" << static_cast<std::string_view>(txn.get(dbi, LMDB::ByteSpan(key)))
+                  << '\n';
       }
       txn.commit();
     } catch (const LMDB::RuntimeError &e) {

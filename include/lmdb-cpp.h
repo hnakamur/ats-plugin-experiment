@@ -5,6 +5,7 @@ extern "C" {
 }
 
 #include <iostream>
+#include <span>
 #include <string_view>
 #include <system_error>
 
@@ -45,23 +46,54 @@ private:
   friend class Txn;
 };
 
+class ByteSpan
+{
+public:
+  using element_type = std::byte;
+  using size_type    = std::span<const element_type>::size_type;
+  using pointer      = const std::byte *;
+
+private:
+  std::span<const element_type> span_;
+
+public:
+  ByteSpan(const element_type *data, std::size_t size) : span_{data, size} {}
+  ByteSpan(std::span<const element_type> span) : span_{span} {}
+  ByteSpan(std::string_view sv) : span_{reinterpret_cast<const std::byte *>(sv.data()), sv.size()} {}
+  ByteSpan() : span_{} {}
+
+  constexpr pointer
+  data() const noexcept
+  {
+    return span_.data();
+  }
+  constexpr size_type
+  size() const noexcept
+  {
+    return span_.size();
+  }
+
+  operator std::span<const element_type>() const noexcept { return span_; }
+
+  operator std::string_view() const noexcept
+  {
+    return std::string_view{reinterpret_cast<const char *>(span_.data()), span_.size()};
+  }
+};
+
 class Val
 {
 private:
   Val() : val_{0, nullptr} {}
-  Val(std::string_view sv)
+  Val(ByteSpan s)
     : val_{
-        sv.size(),
-        const_cast<void *>(static_cast<const void *>(sv.data())),
+        s.size(),
+        const_cast<void *>(static_cast<const void *>(s.data())),
       }
   {
   }
 
-  std::string_view
-  to_string_view() const
-  {
-    return std::string_view{static_cast<const char *>(val_.mv_data), val_.mv_size};
-  }
+  operator ByteSpan() const { return ByteSpan{static_cast<const std::byte *>(val_.mv_data), val_.mv_size}; }
 
   MDB_val val_;
   friend class Txn;
@@ -91,8 +123,8 @@ public:
     return dbi;
   }
 
-  [[must_use]] bool
-  may_get(Dbi dbi, std::string_view key, std::string_view &data)
+  [[nodiscard]] bool
+  may_get(Dbi dbi, ByteSpan key, ByteSpan &data)
   {
     Val key_val{key};
     Val data_val;
@@ -101,21 +133,21 @@ public:
       return false;
     }
     may_throw(err);
-    data = data_val.to_string_view();
+    data = static_cast<ByteSpan>(data_val);
     return true;
   }
 
-  std::string_view
-  get(Dbi dbi, std::string_view key)
+  ByteSpan
+  get(Dbi dbi, ByteSpan key)
   {
     Val key_val{key};
     Val data_val;
     may_throw(mdb_get(txn_, dbi.dbi_, &key_val.val_, &data_val.val_));
-    return data_val.to_string_view();
+    return static_cast<ByteSpan>(data_val);
   }
 
   void
-  put(Dbi dbi, std::string_view key, std::string_view data, unsigned int flags = 0)
+  put(Dbi dbi, ByteSpan key, ByteSpan data, unsigned int flags = 0)
   {
     Val key_val{key};
     Val data_val{data};
@@ -129,7 +161,7 @@ public:
     may_throw(mdb_del(txn_, dbi.dbi_, &key_val.val_, nullptr));
   }
 
-  [[must_use]] bool
+  [[nodiscard]] bool
   may_del(Dbi dbi, std::string_view key)
   {
     Val key_val{key};
