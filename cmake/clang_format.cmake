@@ -2,45 +2,23 @@ set(CLANG_FORMAT
     clang-format
     CACHE STRING "Path to clang-format command"
 )
-set(CLANG_FORMART_TARGET_DIRECTORIES
-    src
-    CACHE STRING "clang-format target filename directories"
-)
-set(CLANG_FORMART_TARGET_PATTERNS
-    *.[ch];*.cc;*.cpp;*.h.in
-    CACHE STRING "clang-format target filename patterns"
+set(CLANG_FORMAT_TARGET_EXTENTIONS
+    h;hpp;hh;c;cc;cxx;cpp
+    CACHE STRING "clang-format target filename extensions"
 )
 
-function(add_clang_format_target)
-  list(JOIN CLANG_FORMART_TARGET_DIRECTORIES " " dirs)
-  set(cmdList echo;${dirs};|;tr;\ ;\\n; |;xargs;-I;{};find;${CMAKE_SOURCE_DIR}/{})
-  foreach(pattern IN LISTS CLANG_FORMART_TARGET_PATTERNS)
-    message(STATUS pattern=${pattern})
-    list(APPEND cmdList -iname ${pattern} -o)
-  endforeach()
-  list(POP_BACK cmdList)
-  list(
-    APPEND
-    cmdList
-    |
-    xargs
-    --verbose
-    ${CLANG_FORMAT}
-    -i
+function(add_clang_format_target target directory)
+  find_program(CLANG_FORMAT_PATH ${CLANG_FORMAT} REQUIRED)
+  list(TRANSFORM CLANG_FORMAT_TARGET_EXTENTIONS PREPEND ${directory}/*. OUTPUT_VARIABLE patterns)
+  file(
+    GLOB_RECURSE files FOLLOW_SYMLINKS
+    LIST_DIRECTORIES false
+    ${patterns}
   )
-  list(JOIN cmdList " " cmd)
-  message(STATUS cmd=${cmd})
-
   add_custom_target(
-    clang-format
-    COMMAND ${cmdList}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    ${target}
+    COMMAND ${CLANG_FORMAT_PATH} -i ${files}
     COMMENT "Checking clang-format for ${target}"
     VERBATIM
-  )
-  list(APPEND CLANG_FORMAT_TARGETS clang-format-${target})
-  set(CLANG_FORMAT_TARGETS
-      ${CLANG_FORMAT_TARGETS}
-      PARENT_SCOPE
   )
 endfunction(add_clang_format_target)
