@@ -4,6 +4,7 @@ extern "C" {
 #include <lmdb.h>
 }
 
+#include <iostream>
 #include <string_view>
 #include <system_error>
 
@@ -71,6 +72,17 @@ class Txn
 public:
   const static unsigned int CREATE = MDB_CREATE;
 
+  ~Txn()
+  {
+    if (!done_) {
+      abort();
+    }
+  }
+  Txn(const Txn &)            = delete;
+  Txn &operator=(const Txn &) = delete;
+  Txn(Txn &&)                 = default;
+  Txn &operator=(Txn &&)      = default;
+
   Dbi
   open_dbi(const char *name, unsigned int flags = 0)
   {
@@ -133,18 +145,21 @@ public:
   commit()
   {
     may_throw(mdb_txn_commit(txn_));
+    done_ = true;
   }
 
   void
   abort() noexcept
   {
     mdb_txn_abort(txn_);
+    done_ = true;
   }
 
   void
   reset() noexcept
   {
     mdb_txn_reset(txn_);
+    done_ = true;
   }
 
   void
@@ -154,8 +169,9 @@ public:
   }
 
 private:
-  Txn() : txn_{nullptr} {}
+  Txn() : txn_{nullptr}, done_{false} {}
   MDB_txn *txn_;
+  bool done_;
   friend class Env;
 };
 
