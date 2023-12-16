@@ -76,35 +76,30 @@ public:
 class MockTsInterface : public TsInterface
 {
 public:
-  const char *
-  getMethod(int *length) override
+  std::string_view
+  getMethod() override
   {
-    *length = _method.length();
-    return _method.c_str();
+    return _method;
   }
-  const char *
-  getHost(int *length) override
+  std::string_view
+  getHost() override
   {
-    *length = _host.length();
-    return _host.c_str();
+    return _host;
   }
-  const char *
+  std::string_view
   getPath(int *length) override
   {
-    *length = _path.length();
-    return _path.c_str();
+    return _path;
   }
-  const char *
-  getParams(int *length) override
+  std::string_view
+  getParams() override
   {
-    *length = _params.length();
-    return _params.c_str();
+    return _params;
   }
-  const char *
-  getQuery(int *length) override
+  std::string_view
+  getQuery() override
   {
-    *length = _query.length();
-    return _query.c_str();
+    return _query;
   }
   HeaderIterator
   headerBegin() override

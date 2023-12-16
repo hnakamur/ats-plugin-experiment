@@ -51,7 +51,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Some constants.
 //
-static const char PLUGIN_NAME[] = "s3_auth";
+static const char PLUGIN_NAME[] = "obj_store_auth";
 static const char DATE_FMT[]    = "%a, %d %b %Y %H:%M:%S %z";
 
 static DbgCtl dbg_ctl{PLUGIN_NAME};
@@ -778,8 +778,9 @@ S3Request::authorizeV4(S3Config *s3)
   TsApi api(_bufp, _hdr_loc, _url_loc);
   time_t now = time(nullptr);
 
-  AwsAuthV4 util(api, &now, /* signPayload */ false, s3->keyid(), s3->keyid_len(), s3->secret(), s3->secret_len(), "s3", 2,
-                 s3->v4includeHeaders(), s3->v4excludeHeaders(), s3->v4RegionMap());
+  AwsAuthV4 util(api, &now, /* signPayload */ false, std::string_view{s3->keyid(), static_cast<size_t>(s3->keyid_len())},
+                 std::string_view{s3->secret(), static_cast<size_t>(s3->secret_len())}, "s3", s3->v4includeHeaders(),
+                 s3->v4excludeHeaders(), s3->v4RegionMap());
   String payloadHash = util.getPayloadHash();
   if (!set_header(X_AMZ_CONTENT_SHA256.c_str(), X_AMZ_CONTENT_SHA256.length(), payloadHash.c_str(), payloadHash.length())) {
     return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;

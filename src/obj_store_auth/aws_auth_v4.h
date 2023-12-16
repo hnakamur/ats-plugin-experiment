@@ -24,12 +24,13 @@
 
 #pragma once
 
-#include <algorithm> /* transform() */
-#include <cstddef>   /* size_t */
-#include <string>    /* std::string */
-#include <sstream>   /* std::stringstream */
-#include <map>       /* std::map */
-#include <set>       /* std::set */
+#include <algorithm>   /* transform() */
+#include <cstddef>     /* size_t */
+#include <string>      /* std::string */
+#include <string_view> /* std::string_view */
+#include <sstream>     /* std::stringstream */
+#include <map>         /* std::map */
+#include <set>         /* std::set */
 
 #include <ts/ts.h>
 
@@ -44,13 +45,13 @@ class TsInterface
 {
 public:
   virtual ~TsInterface(){};
-  virtual const char *getMethod(int *length) = 0;
-  virtual const char *getHost(int *length)   = 0;
-  virtual const char *getPath(int *length)   = 0;
-  virtual const char *getParams(int *length) = 0;
-  virtual const char *getQuery(int *length)  = 0;
-  virtual HeaderIterator headerBegin()       = 0;
-  virtual HeaderIterator headerEnd()         = 0;
+  virtual std::string_view getMethod() = 0;
+  virtual std::string_view getHost()   = 0;
+  virtual std::string_view getPath()   = 0;
+  virtual std::string_view getParams() = 0;
+  virtual std::string_view getQuery()  = 0;
+  virtual HeaderIterator headerBegin() = 0;
+  virtual HeaderIterator headerEnd()   = 0;
 };
 
 #ifdef AWS_AUTH_V4_UNIT_TEST
@@ -68,7 +69,7 @@ static const String X_AMZ                = "x-amz-";
 static const String CONTENT_TYPE         = "content-type";
 static const String HOST                 = "host";
 
-String trimWhiteSpaces(const String &s);
+std::string_view trimWhiteSpaces(std::string_view s);
 
 template <typename ContainerType>
 void
@@ -89,9 +90,9 @@ commaSeparateString(ContainerType &ss, const String &input, bool trim = true, bo
 class AwsAuthV4
 {
 public:
-  AwsAuthV4(TsInterface &api, time_t *now, bool signPayload, const char *awsAccessKeyId, size_t awsAccessKeyIdLen,
-            const char *awsSecretAccessKey, size_t awsSecretAccessKeyLen, const char *awsService, size_t awsServiceLen,
-            const StringSet &includedHeaders, const StringSet &excludedHeaders, const StringMap &regionMap);
+  AwsAuthV4(TsInterface &api, time_t *now, bool signPayload, std::string_view awsAccessKeyId, std::string_view awsSecretAccessKey,
+            std::string_view awsService, const StringSet &includedHeaders, const StringSet &excludedHeaders,
+            const StringMap &regionMap);
   const char *getDateTime(size_t *dateTimeLen);
   String getPayloadHash();
   String getAuthorizationHeader();
@@ -99,13 +100,10 @@ public:
 private:
   TsInterface &_api;
   char _dateTime[sizeof "20170428T010203Z"];
-  bool _signPayload               = false;
-  const char *_awsAccessKeyId     = nullptr;
-  size_t _awsAccessKeyIdLen       = 0;
-  const char *_awsSecretAccessKey = nullptr;
-  size_t _awsSecretAccessKeyLen   = 0;
-  const char *_awsService         = nullptr;
-  size_t _awsServiceLen           = 0;
+  bool _signPayload = false;
+  std::string_view _awsAccessKeyId;
+  std::string_view _awsSecretAccessKey;
+  std::string_view _awsService;
 
   const StringSet &_includedHeaders;
   const StringSet &_excludedHeaders;

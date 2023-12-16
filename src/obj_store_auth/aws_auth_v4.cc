@@ -22,7 +22,6 @@
  * @see aws_auth_v4.h
  */
 
-#include <cstring> /* strlen() */
 #include <string>  /* stoi() */
 #include <ctime>   /* strftime(), time(), gmtime_r() */
 #include <iomanip> /* std::setw */
@@ -42,25 +41,20 @@
  * @see AWS spec: http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
  * Base16 RFC4648: https://tools.ietf.org/html/rfc4648#section-8
  *
- * @param in ptr to an input counted string to be base16 encoded.
- * @param inLen input character string length
+ * @param in an input string to be base16 encoded.
  * @return base16 encoded string.
  */
 String
-base16Encode(const char *in, size_t inLen)
+base16Encode(std::string_view in)
 {
-  if (nullptr == in || inLen == 0) {
+  if (in.empty()) {
     return {};
   }
 
   std::stringstream result;
 
-  const char *src    = in;
-  const char *srcEnd = in + inLen;
-
-  while (src < srcEnd) {
-    result << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>((*src) & 0xFF);
-    src++;
+  for (auto it = in.begin(); it < in.end(); ++it) {
+    result << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>((*it) & 0xFF);
   }
   return result.str();
 }
@@ -176,18 +170,17 @@ canonicalEncode(const String &in, bool isObjectName)
  *
  * @see AWS spec: https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
  *
- * @param in ptr to an input string
- * @param inLen input character count
+ * @param in an input string view
  * @return pointer to the trimmed string.
  */
 String
-trimWhiteSpacesAndSqueezeInnerSpaces(const char *in, size_t inLen)
+trimWhiteSpacesAndSqueezeInnerSpaces(std::string_view in)
 {
-  if (nullptr == in || inLen == 0) {
+  if (in.empty()) {
     return "";
   }
 
-  String in_str = trimWhiteSpaces(String(in, inLen));
+  auto in_str = trimWhiteSpaces(in);
   String out_str;
   out_str.reserve(in_str.size());
   size_t n    = 0;
@@ -212,14 +205,14 @@ trimWhiteSpacesAndSqueezeInnerSpaces(const char *in, size_t inLen)
  * @brief Trim white spaces from beginning and end.
  * @returns trimmed string
  */
-String
-trimWhiteSpaces(const String &s)
+std::string_view
+trimWhiteSpaces(std::string_view s)
 {
   /* @todo do this better? */
-  static const String whiteSpace = " \t\n\v\f\r";
-  size_t start                   = s.find_first_not_of(whiteSpace);
+  static const std::string_view whiteSpace = " \t\n\v\f\r";
+  size_t start                             = s.find_first_not_of(whiteSpace);
   if (String::npos == start) {
-    return String();
+    return std::string_view{};
   }
   size_t stop = s.find_last_not_of(whiteSpace);
   return s.substr(start, stop - start + 1);
@@ -229,24 +222,12 @@ trimWhiteSpaces(const String &s)
  * Group of static inline helper function for less error prone parameter handling and unit test logging.
  */
 inline static void
-sha256Update(crypto_hash_sha256_state *state, const char *in, size_t inLen)
+sha256Update(crypto_hash_sha256_state *state, std::string_view in)
 {
-  crypto_hash_sha256_update(state, reinterpret_cast<const unsigned char *>(in), inLen);
+  crypto_hash_sha256_update(state, reinterpret_cast<const unsigned char *>(in.data()), in.length());
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
-  std::cout << String(in, inLen);
+  std::cout << in;
 #endif
-}
-
-inline static void
-sha256Update(crypto_hash_sha256_state *state, const char *in)
-{
-  sha256Update(state, in, strlen(in));
-}
-
-inline static void
-sha256Update(crypto_hash_sha256_state *state, const String &in)
-{
-  sha256Update(state, in.c_str(), in.length());
 }
 
 inline static void
@@ -274,7 +255,7 @@ getPayloadSha256(bool signPayload)
   unsigned char payloadHash[crypto_hash_sha256_BYTES];
   crypto_hash_sha256(payloadHash, reinterpret_cast<const unsigned char *>(""), 0); /* empty content */
 
-  return base16Encode(reinterpret_cast<char *>(payloadHash), crypto_hash_sha256_BYTES);
+  return base16Encode(std::string_view{reinterpret_cast<char *>(payloadHash), crypto_hash_sha256_BYTES});
 }
 
 /**
@@ -294,8 +275,6 @@ String
 getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSet &includeHeaders, const StringSet &excludeHeaders,
                               String &signedHeaders)
 {
-  int length;
-  const char *str = nullptr;
   unsigned char canonicalRequestSha256Hash[crypto_hash_sha256_BYTES];
   crypto_hash_sha256_state canonicalRequestSha256State;
 
@@ -306,19 +285,18 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
 #endif
 
   /* <HTTPMethod>\n */
-  str = api.getMethod(&length);
-  sha256Update(&canonicalRequestSha256State, str, length);
+  auto method = api.getMethod();
+  sha256Update(&canonicalRequestSha256State, method);
   sha256Update(&canonicalRequestSha256State, "\n");
 
   /* URI Encoded Canonical URI
    * <CanonicalURI>\n */
-  str = api.getPath(&length);
   String path("/");
-  path.append(str, length);
-  str = api.getParams(&length);
-  if (length > 0) {
+  path.append(api.getPath());
+  auto params = api.getParams();
+  if (params.length() > 0) {
     path.append(";", 1);
-    path.append(str, length);
+    path.append(params);
   }
   String canonicalUri = canonicalEncode(path, /* isObjectName */ true);
   sha256Update(&canonicalRequestSha256State, canonicalUri);
@@ -326,11 +304,11 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
 
   /* Sorted Canonical Query String
    * <CanonicalQueryString>\n */
-  const char *query = api.getQuery(&length);
+  auto query = api.getQuery();
 
   StringSet paramNames;
   StringMap paramsMap;
-  std::istringstream istr(String(query, length));
+  std::istringstream istr(String{query});
   String token;
   StringSet container;
 
@@ -398,7 +376,7 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
       }
     }
 
-    std::string trimValue = trimWhiteSpacesAndSqueezeInnerSpaces(value, valueLen);
+    std::string trimValue = trimWhiteSpacesAndSqueezeInnerSpaces(std::string_view{value, static_cast<size_t>(valueLen)});
 
     signedHeadersSet.insert(lowercaseName);
     if (headersMap.find(lowercaseName) == headersMap.end()) {
@@ -436,7 +414,7 @@ getCanonicalRequestSha256Hash(TsInterface &api, bool signPayload, const StringSe
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
   std::cout << "</CanonicalRequest>" << std::endl;
 #endif
-  return base16Encode(reinterpret_cast<char *>(canonicalRequestSha256Hash), crypto_hash_sha256_BYTES);
+  return base16Encode(std::string_view{reinterpret_cast<char *>(canonicalRequestSha256Hash), crypto_hash_sha256_BYTES});
 }
 
 /**
@@ -561,15 +539,13 @@ const StringSet defaultIncludeHeaders = createDefaultIncludeHeaders();
  *   http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region
  *
  * @param regionMap map containing entry-point to region mapping
- * @param entryPoint entry-point name
- * @param entryPointLen - entry point string length
+ * @param hostname hostname
  */
 String
-getRegion(const StringMap &regionMap, const char *entryPoint, size_t entryPointLen)
+getRegion(const StringMap &regionMap, std::string_view hostname)
 {
   String region;
   size_t dot = String::npos;
-  String hostname(entryPoint, entryPointLen);
 
   /* Start looking for a match from the top-level domain backwards to keep the mapping generic
    * (so we can override it if we need later) */
@@ -599,8 +575,6 @@ getRegion(const StringMap &regionMap, const char *entryPoint, size_t entryPointL
  *
  * @see AWS spec: http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
 
- * @param entryPoint  entry-point name
- * @param entryPointLen entry-point name length
  * @param dateTime - ISO 8601 time
  * @param dateTimeLen - ISO 8601 time length
  * @param region AWS region name
@@ -612,8 +586,8 @@ getRegion(const StringMap &regionMap, const char *entryPoint, size_t entryPointL
  * @returns the string to sign
  */
 String
-getStringToSign(const char *entryPoint, size_t EntryPointLen, const char *dateTime, size_t dateTimeLen, const char *region,
-                size_t regionLen, const char *service, size_t serviceLen, const char *sha256Hash, size_t sha256HashLen)
+getStringToSign(const char *dateTime, size_t dateTimeLen, const char *region, size_t regionLen, const char *service,
+                size_t serviceLen, const char *sha256Hash, size_t sha256HashLen)
 {
   String stringToSign;
 
@@ -675,13 +649,13 @@ getSignature(const char *awsSecret, size_t awsSecretLen, const char *awsRegion, 
              size_t awsServiceLen, const char *dateTime, size_t dateTimeLen, const char *stringToSign, size_t stringToSignLen,
              char *signature, size_t signatureLen)
 {
-  unsigned int dateKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  const unsigned int dateKeyLen = crypto_auth_hmacsha256_KEYBYTES;
   unsigned char dateKey[crypto_auth_hmacsha256_KEYBYTES];
-  unsigned int dateRegionKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  const unsigned int dateRegionKeyLen = crypto_auth_hmacsha256_KEYBYTES;
   unsigned char dateRegionKey[crypto_auth_hmacsha256_KEYBYTES];
-  unsigned int dateRegionServiceKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  const unsigned int dateRegionServiceKeyLen = crypto_auth_hmacsha256_KEYBYTES;
   unsigned char dateRegionServiceKey[crypto_auth_hmacsha256_KEYBYTES];
-  unsigned int signingKeyLen = crypto_auth_hmacsha256_KEYBYTES;
+  const unsigned int signingKeyLen = crypto_auth_hmacsha256_KEYBYTES;
   unsigned char signingKey[crypto_auth_hmacsha256_KEYBYTES];
 
   size_t keyLen = 4 + awsSecretLen;
@@ -743,31 +717,30 @@ AwsAuthV4::getAuthorizationHeader()
   String signedHeaders;
   String canonicalReq = getCanonicalRequestSha256Hash(_api, _signPayload, _includedHeaders, _excludedHeaders, signedHeaders);
 
-  int hostLen      = 0;
-  const char *host = _api.getHost(&hostLen);
+  auto host = _api.getHost();
 
-  String awsRegion = getRegion(_regionMap, host, hostLen);
+  String awsRegion = getRegion(_regionMap, host);
 
-  String stringToSign = getStringToSign(host, hostLen, _dateTime, sizeof(_dateTime) - 1, awsRegion.c_str(), awsRegion.length(),
-                                        _awsService, _awsServiceLen, canonicalReq.c_str(), canonicalReq.length());
+  String stringToSign = getStringToSign(_dateTime, sizeof(_dateTime) - 1, awsRegion.c_str(), awsRegion.length(), _awsService.data(),
+                                        _awsService.length(), canonicalReq.c_str(), canonicalReq.length());
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
   std::cout << "<StringToSign>" << stringToSign << "</StringToSign>" << std::endl;
 #endif
 
   char signature[crypto_auth_hmacsha256_BYTES] = "";
-  size_t signatureLen =
-    getSignature(_awsSecretAccessKey, _awsSecretAccessKeyLen, awsRegion.c_str(), awsRegion.length(), _awsService, _awsServiceLen,
-                 _dateTime, 8, stringToSign.c_str(), stringToSign.length(), signature, crypto_auth_hmacsha256_BYTES);
+  size_t signatureLen = getSignature(_awsSecretAccessKey.data(), _awsSecretAccessKey.length(), awsRegion.c_str(),
+                                     awsRegion.length(), _awsService.data(), _awsService.length(), _dateTime, 8,
+                                     stringToSign.c_str(), stringToSign.length(), signature, crypto_auth_hmacsha256_BYTES);
 
-  String base16Signature = base16Encode(signature, signatureLen);
+  String base16Signature = base16Encode(std::string_view{signature, signatureLen});
 #ifdef AWS_AUTH_V4_DETAILED_DEBUG_OUTPUT
   std::cout << "<SignatureProvided>" << base16Signature << "</SignatureProvided>" << std::endl;
 #endif
 
   std::stringstream authorizationHeader;
   authorizationHeader << "AWS4-HMAC-SHA256 ";
-  authorizationHeader << "Credential=" << String(_awsAccessKeyId, _awsAccessKeyIdLen) << "/" << String(_dateTime, 8) << "/"
-                      << awsRegion << "/" << String(_awsService, _awsServiceLen) << "/"
+  authorizationHeader << "Credential=" << _awsAccessKeyId << "/" << String(_dateTime, 8) << "/" << awsRegion << "/" << _awsService
+                      << "/"
                       << "aws4_request"
                       << ",";
   authorizationHeader << "SignedHeaders=" << signedHeaders << ",";
@@ -783,26 +756,20 @@ AwsAuthV4::getAuthorizationHeader()
  * @param now current time-stamp
  * @param signPayload defines if the HTTP content / payload needs to be signed
  * @param awsAccessKeyId AWS access key ID
- * @param awsAccessKeyIdLen AWS access key ID length
  * @param awsSecretAccessKey AWS secret
- * @param awsSecretAccessKeyLen AWS secret length
  * @param awsService AWS Service name
- * @param awsServiceLen AWS service name length
  * @param includeHeaders set of headers to be signed
  * @param excludeHeaders set of headers not to be signed
  * @param regionMap entry-point to AWS region mapping
  */
-AwsAuthV4::AwsAuthV4(TsInterface &api, time_t *now, bool signPayload, const char *awsAccessKeyId, size_t awsAccessKeyIdLen,
-                     const char *awsSecretAccessKey, size_t awsSecretAccessKeyLen, const char *awsService, size_t awsServiceLen,
-                     const StringSet &includedHeaders, const StringSet &excludedHeaders, const StringMap &regionMap)
+AwsAuthV4::AwsAuthV4(TsInterface &api, time_t *now, bool signPayload, std::string_view awsAccessKeyId,
+                     std::string_view awsSecretAccessKey, std::string_view awsService, const StringSet &includedHeaders,
+                     const StringSet &excludedHeaders, const StringMap &regionMap)
   : _api(api),
     _signPayload(signPayload),
     _awsAccessKeyId(awsAccessKeyId),
-    _awsAccessKeyIdLen(awsAccessKeyIdLen),
     _awsSecretAccessKey(awsSecretAccessKey),
-    _awsSecretAccessKeyLen(awsSecretAccessKeyLen),
     _awsService(awsService),
-    _awsServiceLen(awsServiceLen),
     _includedHeaders(includedHeaders.empty() ? defaultIncludeHeaders : includedHeaders),
     _excludedHeaders(excludedHeaders.empty() ? defaultExcludeHeaders : excludedHeaders),
     _regionMap(regionMap.empty() ? defaultDefaultRegionMap : regionMap)

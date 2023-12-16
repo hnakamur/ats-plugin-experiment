@@ -92,30 +92,35 @@ class TsApi : public TsInterface
 public:
   TsApi(TSMBuffer bufp, TSMLoc hdrs, TSMLoc url) : _bufp(bufp), _hdrs(hdrs), _url(url) {}
   ~TsApi() override {}
-  const char *
-  getMethod(int *len) override
+  std::string_view
+  getMethod() override
   {
-    return TSHttpHdrMethodGet(_bufp, _hdrs, len);
+    int len;
+    return std::string_view{TSHttpHdrMethodGet(_bufp, _hdrs, &len), static_cast<size_t>(len)};
   }
-  const char *
-  getHost(int *len) override
+  std::string_view
+  getHost() override
   {
-    return TSHttpHdrHostGet(_bufp, _hdrs, len);
+    int len;
+    return std::string_view{TSHttpHdrHostGet(_bufp, _hdrs, &len), static_cast<size_t>(len)};
   }
-  const char *
-  getPath(int *len) override
+  std::string_view
+  getPath() override
   {
-    return TSUrlPathGet(_bufp, _url, len);
+    int len;
+    return std::string_view{TSUrlPathGet(_bufp, _url, &len), static_cast<size_t>(len)};
   }
-  const char *
-  getParams(int *len) override
+  std::string_view
+  getParams() override
   {
-    return TSUrlHttpParamsGet(_bufp, _url, len);
+    int len;
+    return std::string_view{TSUrlHttpParamsGet(_bufp, _url, &len), static_cast<size_t>(len)};
   }
-  const char *
-  getQuery(int *len) override
+  std::string_view
+  getQuery() override
   {
-    return TSUrlHttpQueryGet(_bufp, _url, len);
+    int len;
+    return std::string_view{TSUrlHttpQueryGet(_bufp, _url, &len), static_cast<size_t>(len)};
   }
   HeaderIterator
   headerBegin() override
