@@ -33,13 +33,13 @@ main(int argc, char **argv)
 
       YAML::Node credentials = config["credentials"];
       for (YAML::const_iterator it = credentials.begin(); it != credentials.end(); ++it) {
-        auto credential       = *it;
-        auto key              = credential["key"].as<std::string>();
-        auto access_key       = credential["access_key"].as<std::string>();
-        auto secret_key       = credential["secret_key"].as<std::string>();
-        auto bucket           = credential["bucket"].as<std::string>();
-        auto endpoint         = credential["endpoint"].as<std::string>();
-        auto region           = credential["region"].as<std::string>();
+        auto credential = *it;
+        auto key        = credential["key"].as<std::string>();
+        auto access_key = credential["access_key"].as<std::string>();
+        auto secret_key = credential["secret_key"].as<std::string>();
+        auto bucket     = credential["bucket"].as<std::string>();
+        auto endpoint   = credential["endpoint"].as<std::string>();
+        auto region     = credential["region"].as<std::string>();
         swoc::LocalBufferWriter<1024> value;
         value.write(bucket)
           .write('\t')

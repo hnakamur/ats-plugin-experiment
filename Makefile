@@ -4,17 +4,20 @@ CLANG_FORMAT = clang-format-16
 install: build
 	sudo cmake --build build --config Release --target install -v
 
-build:
-	@rm -rf build
-	CXX=$(CXX) cmake -B build
+build: setup
 	cmake --build build --verbose
 
-format:
-	if [ ! -d build ]; then CXX=$(CXX) cmake -B build; fi
-	FORMAT=$(CLANG_FORMAT) cmake --build build --target clang-format-src -v
+setup:
+	if [ ! -d build ]; then \
+	CXX=$(CXX) cmake -B build -DCLANG_FORMAT=$(CLANG_FORMAT); \
+	fi
+
+format: setup
+	cmake --build build --target clang-format --verbose
 
 cmake-format:
-	cmake-format -i CMakeLists.txt
+	find . -path ./build -prune -false -o \( -name CMakeLists.txt -o -name '*.cmake' \) \
+	| xargs -n 1 cmake-format -i
 
 clean:
 	@rm -rf build

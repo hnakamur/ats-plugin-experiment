@@ -22,24 +22,19 @@ set(CMAKE_INSTALL_PREFIX /opt/trafficserver)
 set(CMAKE_INSTALL_LIBDIR lib)
 set(CMAKE_INSTALL_LIBEXECDIR lib/modules)
 
+find_library(SODIUM_LIBRARY sodium)
+find_library(LMDB_LIBRARY lmdb)
+
 find_library(TSAPI_LIBRARY tsapi PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
-
 find_library(YAMLCPP_LIBRARY yaml-cpp PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
-
 find_library(SWOC_LIBRARY swoc-static-1.5.5 PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
 
+include(hardening)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=unknown-warning-option)
 endif()
-
-include(hardening)
-
 add_compile_options(-flto -Wunused-parameter)
 add_link_options(-flto -pthread)
-
-find_library(SODIUM_LIBRARY sodium)
-
-find_library(LMDB_LIBRARY lmdb)
 
 function(add_atsplugin name)
   add_library(${name} MODULE ${ARGN})
@@ -64,19 +59,5 @@ target_include_directories(lmdb_setup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 target_link_libraries(lmdb_setup PRIVATE ${YAMLCPP_LIBRARY} ${LMDB_LIBRARY} ${SWOC_LIBRARY})
 install(TARGETS lmdb_setup ${CMAKE_INSTALL_BINDIR})
 
-function(add_clang_format_target target)
-  add_custom_target(
-    clang-format-${target}
-    ${CMAKE_SOURCE_DIR}/tools/clang-format.sh ${CMAKE_SOURCE_DIR}/${target}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Checking clang-format for ${target}"
-    VERBATIM
-  )
-  list(APPEND CLANG_FORMAT_TARGETS clang-format-${target})
-  set(CLANG_FORMAT_TARGETS
-      ${CLANG_FORMAT_TARGETS}
-      PARENT_SCOPE
-  )
-endfunction(add_clang_format_target)
-
+include(clang_format)
 add_clang_format_target(src)
