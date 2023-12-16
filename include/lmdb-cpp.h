@@ -46,40 +46,19 @@ private:
   friend class Txn;
 };
 
-class ByteSpan
+using ByteSpan = std::span<const std::byte>;
+
+ByteSpan
+to_byte_span(std::string_view sv)
 {
-public:
-  using element_type = std::byte;
-  using size_type    = std::span<const element_type>::size_type;
-  using pointer      = const std::byte *;
+  return ByteSpan{reinterpret_cast<const std::byte *>(sv.data()), sv.size()};
+}
 
-private:
-  std::span<const element_type> span_;
-
-public:
-  ByteSpan(const element_type *data, std::size_t size) : span_{data, size} {}
-  ByteSpan(std::span<const element_type> span) : span_{span} {}
-  ByteSpan(std::string_view sv) : span_{reinterpret_cast<const std::byte *>(sv.data()), sv.size()} {}
-  ByteSpan() : span_{} {}
-
-  constexpr pointer
-  data() const noexcept
-  {
-    return span_.data();
-  }
-  constexpr size_type
-  size() const noexcept
-  {
-    return span_.size();
-  }
-
-  operator std::span<const element_type>() const noexcept { return span_; }
-
-  operator std::string_view() const noexcept
-  {
-    return std::string_view{reinterpret_cast<const char *>(span_.data()), span_.size()};
-  }
-};
+std::string_view
+to_string_view(ByteSpan bs)
+{
+  return std::string_view{reinterpret_cast<const char *>(bs.data()), bs.size()};
+}
 
 class Val
 {
@@ -155,14 +134,14 @@ public:
   }
 
   void
-  del(Dbi dbi, std::string_view key)
+  del(Dbi dbi, ByteSpan key)
   {
     Val key_val{key};
     may_throw(mdb_del(txn_, dbi.dbi_, &key_val.val_, nullptr));
   }
 
   [[nodiscard]] bool
-  may_del(Dbi dbi, std::string_view key)
+  may_del(Dbi dbi, ByteSpan key)
   {
     Val key_val{key};
     int err = mdb_del(txn_, dbi.dbi_, &key_val.val_, nullptr);
