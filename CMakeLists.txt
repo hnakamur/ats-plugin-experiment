@@ -26,6 +26,8 @@ find_library(TSAPI_LIBRARY tsapi PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_L
 
 find_library(YAMLCPP_LIBRARY yaml-cpp PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
 
+find_library(SWOC_LIBRARY swoc-static-1.5.5 PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=unknown-warning-option)
 endif()
@@ -35,9 +37,9 @@ include(hardening)
 add_compile_options(-flto -Wunused-parameter)
 add_link_options(-flto -pthread)
 
-find_library(libsodium sodium)
+find_library(SODIUM_LIBRARY sodium)
 
-find_library(liblmdb lmdb)
+find_library(LMDB_LIBRARY lmdb)
 
 function(add_atsplugin name)
   add_library(${name} MODULE ${ARGN})
@@ -55,12 +57,11 @@ add_atsplugin(remap_header_add src/remap_header_add/remap_header_add.cc)
 add_atsplugin(remap_passthru src/remap_passthru/remap_passthru.cc)
 add_atsplugin(remap_echo src/remap_echo/remap_echo.cc)
 add_atsplugin(obj_store_auth src/obj_store_auth/obj_store_auth.cc src/obj_store_auth/aws_auth_v4.cc)
-target_link_libraries(obj_store_auth PRIVATE ${libsodium})
+target_link_libraries(obj_store_auth PRIVATE ${SODIUM_LIBRARY})
 
 add_executable(lmdb_setup src/lmdb_setup/lmdb_setup.cc)
 target_include_directories(lmdb_setup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_INSTALL_PREFIX}/include)
-target_link_libraries(lmdb_setup PRIVATE ${YAMLCPP_LIBRARY})
-target_link_libraries(lmdb_setup PRIVATE ${liblmdb})
+target_link_libraries(lmdb_setup PRIVATE ${YAMLCPP_LIBRARY} ${LMDB_LIBRARY} ${SWOC_LIBRARY})
 install(TARGETS lmdb_setup ${CMAKE_INSTALL_BINDIR})
 
 function(add_clang_format_target target)

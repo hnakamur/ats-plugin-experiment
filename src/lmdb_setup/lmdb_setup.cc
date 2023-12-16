@@ -2,6 +2,7 @@
 #include <filesystem>
 
 #include <yaml-cpp/yaml.h>
+#include <swoc/BufferWriter.h>
 #include "lmdb-cpp.h"
 
 int
@@ -32,17 +33,29 @@ main(int argc, char **argv)
 
       YAML::Node credentials = config["credentials"];
       for (YAML::const_iterator it = credentials.begin(); it != credentials.end(); ++it) {
-        auto credential = *it;
-        auto key        = credential["key"].as<std::string>();
-        auto access_key = credential["access_key"].as<std::string>();
-        auto secret_key = credential["secret_key"].as<std::string>();
-        auto bucket     = credential["bucket"].as<std::string>();
-        auto endpoint   = credential["endpoint"].as<std::string>();
-        auto region     = credential["region"].as<std::string>();
-        std::ostringstream value_stream;
-        value_stream << bucket << '\t' << endpoint << '\t' << region << '\t' << access_key << '\t' << secret_key;
-        auto value = value_stream.str();
+        auto credential       = *it;
+        auto key              = credential["key"].as<std::string>();
+        auto access_key       = credential["access_key"].as<std::string>();
+        auto secret_key       = credential["secret_key"].as<std::string>();
+        auto bucket           = credential["bucket"].as<std::string>();
+        auto endpoint         = credential["endpoint"].as<std::string>();
+        auto region           = credential["region"].as<std::string>();
+        swoc::LocalBufferWriter<1024> value;
+        value.write(bucket)
+          .write('\t')
+          .write(endpoint)
+          .write('\t')
+          .write(region)
+          .write('\t')
+          .write(access_key)
+          .write('\t')
+          .write(secret_key);
+        if (value.error()) {
+          std::cerr << "buffer too small\n";
+          return 1;
+        }
         txn.put(dbi, key, value);
+        std::cout << "done put value, key=" << key << ", value=" << txn.get(dbi, key) << '\n';
       }
       txn.commit();
     } catch (const LMDB::RuntimeError &e) {
