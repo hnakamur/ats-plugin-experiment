@@ -195,6 +195,10 @@ class Env
 {
 public:
   Env() : env_{nullptr} {}
+  Env(const Env &)            = delete;
+  Env &operator=(const Env &) = delete;
+  Env(Env &&)                 = delete;
+  Env &operator=(Env &&)      = delete;
 
   void
   init()

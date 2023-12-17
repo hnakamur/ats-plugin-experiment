@@ -990,13 +990,6 @@ TSReturnCode
 TSRemapInit(TSRemapInterface *api_info, char *errbuf, int errbuf_size)
 {
   Dbg(dbg_ctl, "plugin is successfully initialized");
-  try {
-    gLmdbEnv = LMDB::Env();
-    Dbg(dbg_ctl, "gLmdbEnv address=%p", &gLmdbEnv);
-  } catch (LMDB::RuntimeError &e) {
-    TSError("[%s] failed to create LDMB environment", PLUGIN_NAME);
-    return TS_ERROR;
-  }
   return TS_SUCCESS;
 }
 
