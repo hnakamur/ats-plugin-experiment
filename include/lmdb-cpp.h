@@ -206,7 +206,7 @@ public:
   }
 
   void
-  set_maxdbs(MDB_dbi dbs)
+  set_maxdbs(unsigned int dbs)
   {
     may_throw(mdb_env_set_maxdbs(env_, dbs));
   }

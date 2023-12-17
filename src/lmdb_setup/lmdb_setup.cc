@@ -15,11 +15,11 @@ main(int argc, char **argv)
 
   auto config_path = argv[1];
   try {
-    YAML::Node config           = YAML::LoadFile(config_path);
-    const std::string lmdb_path = config["lmdb_path"].as<std::string>();
-    const int map_size          = config["map_size"].as<int>();
-    const int max_readers       = config["max_readers"].as<int>();
-    const int max_dbs           = config["max_dbs"].as<MDB_dbi>();
+    YAML::Node config              = YAML::LoadFile(config_path);
+    const std::string lmdb_path    = config["lmdb_path"].as<std::string>();
+    const size_t map_size          = config["map_size"].as<size_t>();
+    const unsigned int max_readers = config["max_readers"].as<unsigned int>();
+    const unsigned int max_dbs     = config["max_dbs"].as<unsigned int>();
 
     try {
       std::filesystem::create_directories(lmdb_path);
