@@ -82,7 +82,7 @@ class Txn
 public:
   const static unsigned int CREATE = MDB_CREATE;
 
-  ~Txn()
+  ~Txn() noexcept
   {
     if (!done_) {
       abort();
@@ -194,7 +194,8 @@ private:
 class Env
 {
 public:
-  Env() : env_{nullptr} {}
+  Env() noexcept : env_{nullptr} {}
+  ~Env() noexcept { mdb_env_close(env_); }
   Env(const Env &)            = delete;
   Env &operator=(const Env &) = delete;
   Env(Env &&)                 = delete;
