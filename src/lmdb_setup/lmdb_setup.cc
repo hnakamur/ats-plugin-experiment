@@ -19,7 +19,7 @@ main(int argc, char **argv)
     const std::string lmdb_path = config["lmdb_path"].as<std::string>();
     const int map_size          = config["map_size"].as<int>();
     const int max_readers       = config["max_readers"].as<int>();
-    const int max_dbs           = config["max_dbs"].as<int>();
+    const int max_dbs           = config["max_dbs"].as<MDB_dbi>();
 
     try {
       std::filesystem::create_directories(lmdb_path);
@@ -54,9 +54,8 @@ main(int argc, char **argv)
           std::cerr << "buffer too small\n";
           return 1;
         }
-        txn.put(dbi, LMDB::to_byte_span(key), LMDB::to_byte_span(value));
-        std::cout << "done put value, key=" << key << ", value=" << LMDB::to_string_view(txn.get(dbi, LMDB::to_byte_span(key)))
-                  << '\n';
+        txn.put<std::string_view, std::string_view>(dbi, key, value);
+        std::cout << "done put value, key=" << key << ", value=" << txn.get<std::string_view, std::string_view>(dbi, key) << '\n';
       }
       txn.commit();
     } catch (const LMDB::RuntimeError &e) {

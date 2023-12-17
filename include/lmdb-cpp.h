@@ -48,18 +48,6 @@ private:
 
 using ByteSpan = std::span<const std::byte>;
 
-ByteSpan
-to_byte_span(std::string_view sv)
-{
-  return ByteSpan{reinterpret_cast<const std::byte *>(sv.data()), sv.size()};
-}
-
-std::string_view
-to_string_view(ByteSpan bs)
-{
-  return std::string_view{reinterpret_cast<const char *>(bs.data()), bs.size()};
-}
-
 class Val
 {
 private:
@@ -71,8 +59,16 @@ private:
       }
   {
   }
+  Val(std::string_view sv)
+    : val_{
+        sv.size(),
+        const_cast<void *>(static_cast<const void *>(sv.data())),
+      }
+  {
+  }
 
   operator ByteSpan() const { return ByteSpan{static_cast<const std::byte *>(val_.mv_data), val_.mv_size}; }
+  operator std::string_view() const { return std::string_view{static_cast<const char *>(val_.mv_data), val_.mv_size}; }
 
   MDB_val val_;
   friend class Txn;
@@ -102,8 +98,9 @@ public:
     return dbi;
   }
 
+  template <typename K, typename V>
   [[nodiscard]] bool
-  may_get(Dbi dbi, ByteSpan key, ByteSpan &data)
+  may_get(Dbi dbi, K key, V &data)
   {
     Val key_val{key};
     Val data_val;
@@ -112,36 +109,41 @@ public:
       return false;
     }
     may_throw(err);
-    data = static_cast<ByteSpan>(data_val);
+    data = static_cast<V>(data_val);
     return true;
   }
 
-  ByteSpan
-  get(Dbi dbi, ByteSpan key)
+  template <typename K, typename V>
+  V
+  get(Dbi dbi, K key)
   {
+    std::cout << "Txn:get typeof K=" << typeid(key).name() << '\n';
     Val key_val{key};
     Val data_val;
     may_throw(mdb_get(txn_, dbi.dbi_, &key_val.val_, &data_val.val_));
-    return static_cast<ByteSpan>(data_val);
+    return static_cast<V>(data_val);
   }
 
+  template <typename K, typename V>
   void
-  put(Dbi dbi, ByteSpan key, ByteSpan data, unsigned int flags = 0)
+  put(Dbi dbi, K key, V data, unsigned int flags = 0)
   {
     Val key_val{key};
     Val data_val{data};
     may_throw(mdb_put(txn_, dbi.dbi_, &key_val.val_, &data_val.val_, flags));
   }
 
+  template <typename K>
   void
-  del(Dbi dbi, ByteSpan key)
+  del(Dbi dbi, K key)
   {
     Val key_val{key};
     may_throw(mdb_del(txn_, dbi.dbi_, &key_val.val_, nullptr));
   }
 
+  template <typename K>
   [[nodiscard]] bool
-  may_del(Dbi dbi, ByteSpan key)
+  may_del(Dbi dbi, K key)
   {
     Val key_val{key};
     int err = mdb_del(txn_, dbi.dbi_, &key_val.val_, nullptr);
