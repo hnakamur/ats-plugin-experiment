@@ -1,5 +1,5 @@
-CXX = clang++-16
-CLANG_FORMAT = clang-format-16
+CXX = clang++-17
+CLANG_FORMAT = clang-format-17
 
 build: setup
 	cmake --build build --config Release -v

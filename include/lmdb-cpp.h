@@ -77,6 +77,12 @@ private:
   friend class Txn;
 };
 
+template <typename T>
+concept IsConvertibleToByteSpanOrStringView = (std::is_convertible_v<T, ByteSpan> || std::is_convertible_v<T, std::string_view>);
+
+template <typename T>
+concept IsConvertibleFromByteSpanOrStringView = (std::is_convertible_v<ByteSpan, T> || std::is_convertible_v<std::string_view, T>);
+
 class Txn
 {
 public:
@@ -102,6 +108,7 @@ public:
   }
 
   template <typename K, typename V>
+    requires(IsConvertibleToByteSpanOrStringView<K> && IsConvertibleFromByteSpanOrStringView<V>)
   [[nodiscard]] bool
   may_get(Dbi dbi, K key, V &data)
   {
@@ -117,6 +124,7 @@ public:
   }
 
   template <typename K, typename V>
+    requires(IsConvertibleToByteSpanOrStringView<K> && IsConvertibleFromByteSpanOrStringView<V>)
   V
   get(Dbi dbi, K key)
   {
@@ -128,6 +136,7 @@ public:
   }
 
   template <typename K, typename V>
+    requires(IsConvertibleToByteSpanOrStringView<K> && IsConvertibleToByteSpanOrStringView<V>)
   void
   put(Dbi dbi, K key, V data, unsigned int flags = 0)
   {
@@ -137,6 +146,7 @@ public:
   }
 
   template <typename K>
+    requires IsConvertibleToByteSpanOrStringView<K>
   void
   del(Dbi dbi, K key)
   {
@@ -145,6 +155,7 @@ public:
   }
 
   template <typename K>
+    requires IsConvertibleToByteSpanOrStringView<K>
   [[nodiscard]] bool
   may_del(Dbi dbi, K key)
   {
