@@ -40,11 +40,14 @@
 #include <thread>
 #include <mutex>
 #include <shared_mutex>
+#include <thread>
 
 #include <ts/ts.h>
 #include <ts/remap.h>
 #include <tsutil/TsSharedMutex.h>
+#include <yaml-cpp/yaml.h>
 #include "swoc/TextView.h"
+#include "lmdb-cpp.h"
 
 #include "aws_auth_v4.h"
 
@@ -55,6 +58,33 @@ static const char PLUGIN_NAME[] = "obj_store_auth";
 static const char DATE_FMT[]    = "%a, %d %b %Y %H:%M:%S %z";
 
 static DbgCtl dbg_ctl{PLUGIN_NAME};
+
+static std::once_flag gLmdbEnvInitOnceFlag;
+static LMDB::Env gLmdbEnv;
+static LMDB::Dbi gLMDBCredentialsDbi;
+
+static const std::string gLmdbUserKey = "user1";
+
+static void
+doOpenLmdbDb(const std::string &config_path)
+{
+  Dbg(dbg_ctl, "config_path=%s", config_path.c_str());
+  YAML::Node config              = YAML::LoadFile(config_path);
+  const std::string lmdb_path    = config["lmdb_path"].as<std::string>();
+  const size_t map_size          = config["map_size"].as<size_t>();
+  const unsigned int max_readers = config["max_readers"].as<unsigned int>();
+  const unsigned int max_dbs     = config["max_dbs"].as<unsigned int>();
+
+  gLmdbEnv.init();
+  gLmdbEnv.set_mapsize(map_size);
+  gLmdbEnv.set_maxreaders(max_readers);
+  gLmdbEnv.set_maxdbs(max_dbs);
+  gLmdbEnv.open(lmdb_path.c_str(), MDB_RDONLY);
+  auto txn            = gLmdbEnv.begin_readonly_txn();
+  gLMDBCredentialsDbi = txn.open_dbi("credentials");
+  txn.commit();
+  Dbg(dbg_ctl, "gLMDBCredentialsDbi=%u", gLMDBCredentialsDbi);
+}
 
 /**
  * @brief Rebase a relative path onto the configuration directory.
@@ -778,33 +808,77 @@ S3Request::authorizeV4(S3Config *s3)
   TsApi api(_bufp, _hdr_loc, _url_loc);
   time_t now = time(nullptr);
 
-  AwsAuthV4 util(api, &now, /* signPayload */ false, std::string_view{s3->keyid(), static_cast<size_t>(s3->keyid_len())},
-                 std::string_view{s3->secret(), static_cast<size_t>(s3->secret_len())}, "s3", s3->v4includeHeaders(),
-                 s3->v4excludeHeaders(), s3->v4RegionMap());
-  String payloadHash = util.getPayloadHash();
-  if (!set_header(X_AMZ_CONTENT_SHA256.c_str(), X_AMZ_CONTENT_SHA256.length(), payloadHash.c_str(), payloadHash.length())) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
+  try {
+    Dbg(dbg_ctl, "opening LMDB transaction");
+    auto txn = gLmdbEnv.begin_readonly_txn();
+    Dbg(dbg_ctl, "opened LMDB transaction, gLMDBCredentialsDbi=%u", gLMDBCredentialsDbi);
+    auto userConfig = txn.get<std::string_view, std::string_view>(gLMDBCredentialsDbi, gLmdbUserKey);
+    Dbg(dbg_ctl, "got userConfig len=%lu", userConfig.size());
+    Dbg(dbg_ctl, "userConfig=%.*s", static_cast<int>(userConfig.size()), userConfig.data());
+    auto bucketEndPos = userConfig.find('\t');
+    Dbg(dbg_ctl, "bucketEndPos=%lu", bucketEndPos);
+    if (bucketEndPos == std::string_view::npos) {
+      throw std::runtime_error("invalid LMDB data format");
+    }
+    auto endPointEndPos = userConfig.find('\t', bucketEndPos + 1);
+    Dbg(dbg_ctl, "endPointEndPos=%lu", endPointEndPos);
+    if (endPointEndPos == std::string_view::npos) {
+      throw std::runtime_error("invalid LMDB data format");
+    }
+    auto regionEndPos = userConfig.find('\t', endPointEndPos + 1);
+    Dbg(dbg_ctl, "regionEndPos=%lu", regionEndPos);
+    if (regionEndPos == std::string_view::npos) {
+      throw std::runtime_error("invalid LMDB data format");
+    }
+    auto accessKeyEndPos = userConfig.find('\t', regionEndPos + 1);
+    Dbg(dbg_ctl, "accessKeyEndPos=%lu", accessKeyEndPos);
+    if (accessKeyEndPos == std::string_view::npos) {
+      throw std::runtime_error("invalid LMDB data format");
+    }
+    auto accessKey = userConfig.substr(regionEndPos + 1, accessKeyEndPos - (regionEndPos + 1));
+    Dbg(dbg_ctl, "accessKey=%.*s!", static_cast<int>(accessKey.size()), accessKey.data());
+    auto secretKey = userConfig.substr(accessKeyEndPos + 1);
+    Dbg(dbg_ctl, "secretKey=%.*s!", static_cast<int>(secretKey.size()), secretKey.data());
 
-  /* set x-amz-date header */
-  size_t dateTimeLen   = 0;
-  const char *dateTime = util.getDateTime(&dateTimeLen);
-  if (!set_header(X_AMX_DATE.c_str(), X_AMX_DATE.length(), dateTime, dateTimeLen)) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
+    AwsAuthV4 util(api, &now, /* signPayload */ false, accessKey, secretKey, "s3", s3->v4includeHeaders(), s3->v4excludeHeaders(),
+                   s3->v4RegionMap());
+    Dbg(dbg_ctl, "keyid=%.*s!", s3->keyid_len(), s3->keyid());
+    Dbg(dbg_ctl, "secret=%.*s!", s3->secret_len(), s3->secret());
+    Dbg(dbg_ctl, "accessKey.len=%lu, keyid.len=%d", accessKey.size(), s3->keyid_len());
+    Dbg(dbg_ctl, "accessKey == keyid: %d", accessKey == std::string_view{s3->keyid(), static_cast<size_t>(s3->keyid_len())});
+    Dbg(dbg_ctl, "secretKey == secret: %d", secretKey == std::string_view{s3->secret(), static_cast<size_t>(s3->secret_len())});
+    // AwsAuthV4 util(api, &now, /* signPayload */ false, std::string_view{s3->keyid(), static_cast<size_t>(s3->keyid_len())},
+    //                std::string_view{s3->secret(), static_cast<size_t>(s3->secret_len())}, "s3", s3->v4includeHeaders(),
+    //                s3->v4excludeHeaders(), s3->v4RegionMap());
+    txn.commit();
+    String payloadHash = util.getPayloadHash();
+    if (!set_header(X_AMZ_CONTENT_SHA256.c_str(), X_AMZ_CONTENT_SHA256.length(), payloadHash.c_str(), payloadHash.length())) {
+      return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    }
 
-  /* set X-Amz-Security-Token if we have a token */
-  if (nullptr != s3->token() && '\0' != *(s3->token()) &&
-      !set_header(X_AMZ_SECURITY_TOKEN.data(), X_AMZ_SECURITY_TOKEN.size(), s3->token(), s3->token_len())) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
+    /* set x-amz-date header */
+    size_t dateTimeLen   = 0;
+    const char *dateTime = util.getDateTime(&dateTimeLen);
+    if (!set_header(X_AMX_DATE.c_str(), X_AMX_DATE.length(), dateTime, dateTimeLen)) {
+      return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    }
 
-  String auth = util.getAuthorizationHeader();
-  if (auth.empty()) {
-    return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
-  }
+    /* set X-Amz-Security-Token if we have a token */
+    if (nullptr != s3->token() && '\0' != *(s3->token()) &&
+        !set_header(X_AMZ_SECURITY_TOKEN.data(), X_AMZ_SECURITY_TOKEN.size(), s3->token(), s3->token_len())) {
+      return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    }
 
-  if (!set_header(TS_MIME_FIELD_AUTHORIZATION, TS_MIME_LEN_AUTHORIZATION, auth.c_str(), auth.length())) {
+    String auth = util.getAuthorizationHeader();
+    if (auth.empty()) {
+      return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    }
+
+    if (!set_header(TS_MIME_FIELD_AUTHORIZATION, TS_MIME_LEN_AUTHORIZATION, auth.c_str(), auth.length())) {
+      return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    }
+  } catch (std::runtime_error &e) {
+    TSError("[%s] Failed to get data from LMDB: %s", PLUGIN_NAME, e.what());
     return TS_HTTP_STATUS_INTERNAL_SERVER_ERROR;
   }
 
@@ -916,6 +990,13 @@ TSReturnCode
 TSRemapInit(TSRemapInterface *api_info, char *errbuf, int errbuf_size)
 {
   Dbg(dbg_ctl, "plugin is successfully initialized");
+  try {
+    gLmdbEnv = LMDB::Env();
+    Dbg(dbg_ctl, "gLmdbEnv address=%p", &gLmdbEnv);
+  } catch (LMDB::RuntimeError &e) {
+    TSError("[%s] failed to create LDMB environment", PLUGIN_NAME);
+    return TS_ERROR;
+  }
   return TS_SUCCESS;
 }
 
@@ -925,6 +1006,7 @@ TSRemapInit(TSRemapInterface *api_info, char *errbuf, int errbuf_size)
 TSReturnCode
 TSRemapNewInstance(int argc, char *argv[], void **ih, char * /* errbuf ATS_UNUSED */, int /* errbuf_size ATS_UNUSED */)
 {
+  Dbg(dbg_ctl, "gLmdbEnv address=%p", &gLmdbEnv);
   static const struct option longopt[] = {
     {const_cast<char *>("access_key"),         required_argument, nullptr, 'a' },
     {const_cast<char *>("config"),             required_argument, nullptr, 'c' },
@@ -935,11 +1017,13 @@ TSRemapNewInstance(int argc, char *argv[], void **ih, char * /* errbuf ATS_UNUSE
     {const_cast<char *>("v4-exclude-headers"), required_argument, nullptr, 'e' },
     {const_cast<char *>("v4-region-map"),      required_argument, nullptr, 'm' },
     {const_cast<char *>("session_token"),      required_argument, nullptr, 't' },
+    {const_cast<char *>("config_path"),        required_argument, nullptr, 'g' },
     {nullptr,                                  no_argument,       nullptr, '\0'},
   };
 
   S3Config *s3          = new S3Config(true); // true == this config gets the continuation
   S3Config *file_config = nullptr;
+  std::string config_path;
 
   // argv contains the "to" and "from" URLs. Skip the first so that the
   // second one poses as the program name.
@@ -982,11 +1066,27 @@ TSRemapNewInstance(int argc, char *argv[], void **ih, char * /* errbuf ATS_UNUSE
     case 'm':
       s3->set_region_map(optarg);
       break;
+    case 'g':
+      config_path = makeConfigPath(std::string{optarg});
+      break;
     }
 
     if (opt == -1) {
       break;
     }
+  }
+
+  try {
+    Dbg(dbg_ctl, "calling call_once with config_path=%s", config_path.c_str());
+    std::call_once(gLmdbEnvInitOnceFlag, doOpenLmdbDb, config_path);
+  } catch (const LMDB::RuntimeError &e) {
+    TSError("[%s] lmdb error: %s", PLUGIN_NAME, e.what());
+    *ih = nullptr;
+    return TS_ERROR;
+  } catch (const YAML::Exception &e) {
+    TSError("[%s] error while parsing YAML file: %s: %s", PLUGIN_NAME, e.what(), config_path.c_str());
+    *ih = nullptr;
+    return TS_ERROR;
   }
 
   // Copy the config file secret into our instance of the configuration.

@@ -24,12 +24,14 @@ main(int argc, char **argv)
     try {
       std::filesystem::create_directories(lmdb_path);
       LMDB::Env env;
+      env.init();
       env.set_mapsize(map_size);
       env.set_maxreaders(max_readers);
       env.set_maxdbs(max_dbs);
       env.open(lmdb_path.c_str());
       auto txn = env.begin_txn();
       auto dbi = txn.open_dbi("credentials", LMDB::Txn::CREATE);
+      std::cout << "dbi=" << static_cast<unsigned int>(dbi) << '\n';
 
       YAML::Node credentials = config["credentials"];
       for (YAML::const_iterator it = credentials.begin(); it != credentials.end(); ++it) {
@@ -55,7 +57,8 @@ main(int argc, char **argv)
           return 1;
         }
         txn.put<std::string_view, std::string_view>(dbi, key, value);
-        std::cout << "done put value, key=" << key << ", value=" << txn.get<std::string_view, std::string_view>(dbi, key) << '\n';
+        std::cout << "done put value, key=" << key << ", value=" << txn.get<std::string_view, std::string_view>(dbi, key)
+                  << ", valueLen=" << value.size() << '\n';
       }
       txn.commit();
     } catch (const LMDB::RuntimeError &e) {

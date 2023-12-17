@@ -38,7 +38,7 @@ ts:
   diags:
     debug:
       enabled: 1
-      tags: http|dns|hello|headeradd_remap|plugin|statichit|ts_lua
+      tags: http|dns|hello|headeradd_remap|plugin|statichit|ts_lua|obj_store_auth
 
 #    https://docs.trafficserver.apache.org/records.yaml#proxy-config-dump-mem-info-frequency
   dump_mem_info_frequency: 0

@@ -40,8 +40,11 @@ may_throw(int code)
 
 class Dbi
 {
-private:
+public:
   Dbi() {}
+  operator unsigned int() const { return dbi_; }
+
+private:
   MDB_dbi dbi_;
   friend class Txn;
 };
@@ -191,7 +194,13 @@ private:
 class Env
 {
 public:
-  Env() { may_throw(mdb_env_create(&env_)); }
+  Env() : env_{nullptr} {}
+
+  void
+  init()
+  {
+    may_throw(mdb_env_create(&env_));
+  }
 
   void
   set_mapsize(size_t size)

@@ -15,11 +15,11 @@
 #
 #######################
 
-project(s3_auth)
+project(obj_store_auth)
 
-add_atsplugin(s3_auth s3_auth.cc aws_auth_v4.cc)
+add_atsplugin(obj_store_auth obj_store_auth.cc aws_auth_v4.cc)
 
-target_link_libraries(s3_auth PRIVATE ts::tscore OpenSSL::Crypto)
+target_link_libraries(obj_store_auth PRIVATE ts::tscore OpenSSL::Crypto)
 
 if(BUILD_TESTING)
   add_subdirectory(unit_tests)
