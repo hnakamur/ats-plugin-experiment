@@ -9,6 +9,7 @@ build: setup
 
 install: build
 	sudo cmake --build build --config Release --target install -v
+	sudo chown -R $$USER: build
 
 debug_build: setup
 	cmake --build build --config Debug -v
